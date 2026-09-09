@@ -1,0 +1,16 @@
+ILLUSTRATIVE FORMAT ONLY - NO LIVE SIGNAL OR BACKTEST RESULT
+
+BTC QUANT BOT 2 | CLOSED 1H
+PAPER ONLY - NO VERIFIED 90% EDGE
+BTC: BUY (LONG)
+Signal: pair_spread
+Companion: chosen only after validation comparison
+[COMPANION]: SELL / SHORT - REQUIRED HEDGE LEG
+Confirmed at: [completed-candle timestamp]
+Planned entry: [next whole hour after the notification hour]
+Gross notional split: [computed from formation beta]
+Historical win rate: NOT AVAILABLE IN THE SHIPPED PACKAGE
+Next-trade probability: NOT ESTIMATED
+
+This is a two-leg example. Taking BTC alone is a different strategy.
+No order placed. No live prices, fabricated confidence or performance figures shown.

@@ -1,0 +1,23 @@
+name: Bot2 - Telegram Setup
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  connect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Verify Bot 2 privately
+        env:
+          TELEGRAM_BOT2_TOKEN: ${{ secrets.TELEGRAM_BOT2_TOKEN }}
+          TELEGRAM_BOT2_CHAT_ID: ${{ secrets.TELEGRAM_BOT2_CHAT_ID }}
+        run: python main.py setup

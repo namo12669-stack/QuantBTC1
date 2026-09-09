@@ -1,0 +1,14 @@
+{
+  "build_date_utc": "2026-09-09",
+  "project_version": "1.0.0",
+  "real_market_backtest_status": "NOT_RUN_NETWORK_UNAVAILABLE",
+  "reason": "Runtime download attempts failed due to network/DNS access; web research was available but complete exchange price archives were not downloaded.",
+  "best_pair": null,
+  "real_holdout_win_rate": null,
+  "estimated_next_trade_win_probability": null,
+  "approved_model_bundled": false,
+  "real_data_download_workflow_included": true,
+  "offline_test_result": "111 tests passed; see test-results.xml for the final packaged run",
+  "synthetic_test_results_are_market_evidence": false,
+  "live_telegram_end_to_end_tested": false
+}

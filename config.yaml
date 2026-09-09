@@ -1,0 +1,87 @@
+project: btc-quant-bot2
+version: 1.0.0
+data:
+  venue: binance_usdm
+  bitcoin: BTCUSDT
+  peers: [ETHUSDT, SOLUSDT, BNBUSDT, XRPUSDT, LINKUSDT]
+  interval: 1h
+  start: '2021-01-01'
+  validation_start: '2024-01-01'
+  test_start: '2025-01-01'
+  end_exclusive: '2026-09-01'
+  live_bars: 3200
+  timeout_seconds: 25
+  retries: 3
+  archive_checksum_required: true
+execution:
+  # Assumptions, NOT a claim about your exchange/account's actual fees.
+  fee_bps_per_side: 6.0
+  slippage_bps_per_side: 4.0
+  stress_multiplier: 2.0
+  # Signal candle opens at T, closes T+1h, entry is T+2h.
+  # This allows an alert at ~T+1h+7min without backdating its fill.
+  entry_delay_bars: 2
+  close_exit_delay_bars: 2
+  gross_exposure: 1.0
+  cooldown_bars: 6
+  funding_required: true
+  max_live_spread_bps: 10.0
+  max_alert_delay_minutes: 25
+  max_abs_recent_funding_rate: 0.003
+signals:
+  families: [pair_spread, lead_lag, divergence, breakout]
+  refit_hours: 168
+  pair_formation_hours: 720
+  pair_entry_z: 2.25
+  pair_exit_z: 0.30
+  pair_stop_z: 3.75
+  pair_coint_p: 0.01
+  pair_min_half_life: 2.0
+  pair_max_half_life: 120.0
+  pair_min_return_correlation: 0.30
+  pair_max_holding_hours: 48
+  pair_loss_limit: 0.02
+  lead_formation_hours: 2160
+  lead_inner_test_hours: 360
+  lead_horizon_hours: 6
+  lead_min_mse_improvement: 0.02
+  lead_min_inner_ic: 0.05
+  lead_forecast_cost_multiple: 3.0
+  lead_forecast_sigma_multiple: 0.50
+  pivot_left: 3
+  pivot_right: 3
+  pivot_min_gap: 6
+  pivot_max_gap: 72
+  divergence_min_rsi_delta: 5.0
+  divergence_min_price_fraction: 0.002
+  breakout_hours: 48
+  breakout_rvol: 1.5
+  max_atr_fraction: 0.03
+  directional_max_holding_hours: 24
+selection:
+  min_validation_trades: 60
+  min_validation_profit_factor: 1.05
+  min_validation_positive_month_fraction: 0.50
+  # Candidate is selected on VALIDATION only, never replaced using test results.
+  criterion: daily_net_sharpe
+proof_gate:
+  minimum_win_rate_lower_bound: 0.90
+  minimum_test_trades: 200
+  minimum_direction_trades: 100
+  minimum_test_calendar_months: 12
+  minimum_active_weeks: 26
+  minimum_direction_active_weeks: 16
+  minimum_profit_factor: 1.25
+  maximum_drawdown: 0.25
+  minimum_positive_month_fraction: 0.60
+  family_alpha: 0.05
+  bootstrap_repetitions: 2000
+  # Overall + BUY side + SELL side, with a Bonferroni alpha allocation.
+  confidence_checks: 3
+  max_evidence_age_days: 45
+  seed: 71129
+alerts:
+  default_mode: strict
+  state_branch: btc-bot2-state
+  heartbeat_hour_utc: 0
+  paper_mode_available_manually: true
