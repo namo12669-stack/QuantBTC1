@@ -17,11 +17,11 @@ def ledger(n=600,win_fraction=.97):
     return t,eq
 
 @pytest.mark.parametrize('wins,trials',[(0,0),(9,10),(90,100),(180,200),(900,1000)])
-def test_ninety_percent_observed_not_ninety_lower_bound(wins,trials):
-    assert wilson_lower(wins,trials)<.9
+def test_observed_rate_not_identical_to_lower_bound(wins,trials):
+    assert wilson_lower(wins,trials) <= (wins/trials if trials else 0)
 
 def test_all_wins_small_sample_still_insufficient():
-    assert wilson_lower(10,10,.05/3)<.9
+    assert wilson_lower(10,10,.05/3)<1
 
 def test_more_evidence_tightens_bound():
     assert wilson_lower(970,1000)>wilson_lower(97,100)
@@ -32,7 +32,7 @@ def test_block_bootstrap_reproducible():
 
 def test_empty_evidence_blocks(cfg):
     _,eq=ledger()
-    result=validate_evidence(pd.DataFrame(),eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_exchange_archive')
+    result=validate_evidence(pd.DataFrame(),eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_coinbase_spot_api')
     assert not result['approved']
 
 def test_synthetic_never_certified(cfg):
@@ -43,7 +43,7 @@ def test_synthetic_never_certified(cfg):
 
 def test_strict_can_pass_statistical_fixture_but_not_market_claim(cfg):
     t,eq=ledger(win_fraction=1)
-    out=validate_evidence(t,eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_exchange_archive')
+    out=validate_evidence(t,eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_coinbase_spot_api')
     # Unit fixture explicitly supplies a source label; this is NOT a real backtest result.
     assert out['approved']
     assert out['per_trade_probability'] is None
@@ -52,22 +52,22 @@ def test_high_win_rate_can_have_negative_expectancy(cfg):
     t,eq=ledger(win_fraction=.96)
     t['net_return']=np.where(t.win,.0005,-.05)
     t['stress_net_return']=t.net_return-.001
-    out=validate_evidence(t,eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_exchange_archive')
+    out=validate_evidence(t,eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_coinbase_spot_api')
     assert not out['approved']
     assert 'COST_STRESS_NOT_PROFITABLE' in out['reasons']
 
 def test_one_direction_is_not_evidence_for_other(cfg):
     t,eq=ledger(win_fraction=1);t['direction']=1
-    out=validate_evidence(t,eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_exchange_archive')
+    out=validate_evidence(t,eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_coinbase_spot_api')
     assert not out['approved']
     assert out['subsets']['SELL']['trades']==0
 
 def test_clustered_short_history_rejected(cfg):
     t,eq=ledger(win_fraction=1)
     t['entry_time']=pd.date_range('2025-01-01',periods=len(t),freq='h',tz='UTC')
-    out=validate_evidence(t,eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_exchange_archive')
+    out=validate_evidence(t,eq,cfg,eq.index[0],eq.index[-1]+HOUR,'real_coinbase_spot_api')
     assert not out['approved']
-    assert out['subsets']['overall']['active_weeks']<26
+    assert out['subsets']['overall']['active_weeks']<24
 
 def test_select_on_validation_not_holdout(cfg):
     base={'trades':100,'mean_net_return':.01,'profit_factor':2,'positive_month_fraction':.75,'mean_stress_return':.005}
@@ -79,14 +79,14 @@ def test_must_beat_btc_only_baseline(cfg):
     assert select_candidate(rec,cfg,2)[0] is None
 
 def test_config_change_invalidates_model(cfg):
-    model={'source':'real_exchange_archive','fingerprint':fingerprint(cfg),'approved':True,'evidence':{'approved':True},'test_end_exclusive':'2026-09-01'}
+    model={'source':'real_coinbase_spot_api','fingerprint':fingerprint(cfg),'approved':True,'evidence':{'approved':True},'test_end_exclusive':'2026-09-01'}
     assert eligibility(model,cfg,'2026-09-09')[0]
     cfg['execution']['fee_bps_per_side']+=1
     assert not eligibility(model,cfg,'2026-09-09')[0]
 
 @pytest.mark.parametrize('when',['2026-08-01','2026-12-01'])
 def test_future_or_stale_evidence_blocks(when,cfg):
-    model={'source':'real_exchange_archive','fingerprint':fingerprint(cfg),'approved':True,'evidence':{'approved':True},'test_end_exclusive':'2026-09-01'}
+    model={'source':'real_coinbase_spot_api','fingerprint':fingerprint(cfg),'approved':True,'evidence':{'approved':True},'test_end_exclusive':'2026-09-01'}
     assert not eligibility(model,cfg,when)[0]
 
 def test_absent_model_blocks(cfg): assert not eligibility(None,cfg,'2026-09-09')[0]

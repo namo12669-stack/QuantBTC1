@@ -1,48 +1,14 @@
-# คู่มือติดตั้ง BTC Quant Bot 2 — GitHub + Telegram
-รุ่น 1.0.0 | จัดทำ 9 กันยายน 2026
+# BTC Quant Bot 2 v1.1 - คู่มือเริ่มต้น
 
-## อ่านก่อนเริ่ม
+เวอร์ชันนี้แก้ปัญหา `HTTP 451` ที่คุณเจอใน **Bot2 - Check Data** โดยเลิกใช้ Binance USD-M เป็น data provider ทั้งใน Backtest และ Live scan แล้วเปลี่ยนเป็น **Coinbase Exchange public spot data** เพื่อไม่ให้ Backtest ใช้ตลาดหนึ่งแต่ Live ใช้อีกตลาดหนึ่ง
 
-**ไฟล์นี้ยังไม่มีผล Backtest ตลาดจริงที่ผ่านการยืนยัน และยังไม่มีคู่ชนะหรือโมเดลที่รับรอง 90%**
-สภาพแวดล้อมที่สร้างไฟล์เปิดอ่านงานวิจัยได้ แต่ดาวน์โหลดข้อมูลราคาย้อนหลังไม่ได้ จึงจัด Workflow ให้ดาวน์โหลดข้อมูลจริงและ Backtest บน GitHub แทน ผลทดสอบโค้ดออฟไลน์/ข้อมูลจำลองไม่ใช่ผลกำไรตลาดจริง
+ไม่มี Proxy/VPN/วิธี bypass และไม่มีการส่งคำสั่งซื้อขายจริง
 
-นี่เป็นโปรเจกต์ใหม่สำหรับ Bitcoin กราฟ 1H **อย่าอัปโหลดทับ repository ของบอตหุ้นเดิม**
-บอตไม่ซื้อขายเอง ไม่ต่อบัญชีโบรกเกอร์ ไม่ต้องใส่ API key ของ Exchange และไม่สามารถตั้ง Stop Loss ให้คุณได้
+## 1. อัปโหลด v1.1 ทับ repository Bot 2 เดิม
 
-คำว่า SELL ในบอตหมายถึง **เปิด Short** ไม่ใช่ขาย Spot BTC ที่ถืออยู่
-คู่แบบ Pair Spread ต้องทำทั้งสองขาตามแบบจำลอง การซื้อ BTC ขาเดียวไม่ใช่กลยุทธ์ที่ Backtest ไว้
+แตก ZIP แล้วอัปโหลดไฟล์ด้านในทับของเดิม โดยต้องเห็น:
 
----
-
-## 1. สร้าง Telegram Bot ตัวที่ 2
-
-เปิด Telegram ค้นหา `@BotFather` ตัวทางการ แล้วส่ง:
-
-```
-/newbot
-```
-
-ตั้งชื่อ เช่น `BTC Quant Research` และ username ที่ลงท้าย `bot` ตามที่ Telegram ให้ตั้ง
-เก็บ Token ของ **บอตใหม่** ไว้ จากนั้นเปิดแชทกับบอตใหม่ กด Start หรือส่ง `/start`
-
-ไม่ต้องลบบอตหุ้นตัวเดิม และห้ามใช้ Token ของบอตหุ้นแทนโดยไม่ตั้งใจ
-ห้ามส่ง Token ให้ผม ห้ามใส่ Token ลงไฟล์หรือภาพหน้าจอ
-
-เอกสารทางการ: https://core.telegram.org/bots/features
-
-## 2. สร้าง repository ใหม่
-
-ใน GitHub กดสร้าง New repository ชื่อประมาณ:
-
-```
-btc-quant-bot2
-```
-
-เลือก **Private** แล้วแตก ZIP ที่ได้รับ อัปโหลดไฟล์และโฟลเดอร์ด้านใน ไม่ใช่อัปโหลด ZIP อย่างเดียว
-
-โครงสร้างหน้าหลักควรเป็น:
-
-```
+```text
 .github/
   workflows/
     bot2_setup.yml
@@ -51,255 +17,135 @@ btc-quant-bot2
     bot2_scan.yml
     tests.yml
 btc_quant/
-tests/
-docs/
-WORKFLOW_COPIES/
-reports/
-examples/
-main.py
 config.yaml
-requirements.txt
-requirements-dev.txt
+main.py
 README.md
-START_HERE_TH.md
 ```
 
-**ห้ามวางเป็น `workflows/` ที่หน้าหลัก** ต้องเป็น `.github/workflows/` เท่านั้น
+Secrets เดิมใช้ต่อได้:
 
-### ถ้าอัปโหลดโฟลเดอร์ .github ไม่ได้ หรือแท็บ Actions ไม่เห็นรายการ
-
-ใน repo กด **Add file → Create new file**
-ที่ช่องชื่อไฟล์พิมพ์:
-
-```
-.github/workflows/bot2_setup.yml
+```text
+TELEGRAM_BOT2_TOKEN
+TELEGRAM_BOT2_CHAT_ID
 ```
 
-เปิดไฟล์ `WORKFLOW_COPIES/bot2_setup.yml.txt` ใน ZIP คัดลอกเนื้อหาทั้งหมดมาวาง แล้ว Commit
-ทำแบบเดียวกันจนครบห้าไฟล์ โดยเอา `.txt` ออกเมื่อสร้างไฟล์จริงใน GitHub
+ไม่ต้องสร้าง Telegram bot ใหม่อีกครั้ง
 
-ตัวอย่าง:
-`WORKFLOW_COPIES/bot2_scan.yml.txt` → สร้าง `.github/workflows/bot2_scan.yml`
+## 2. เช็ก Version
 
-วางบน default branch เช่น `main` ไม่ใช่ branch เก็บสถานะ `btc-bot2-state`
-ไม่ต้องใส่โฟลเดอร์โปรเจกต์ซ้อนอีกชั้นก่อน `main.py`
+เปิด `config.yaml` ต้องเห็น:
 
-## 3. ตั้ง Secrets สำหรับ Bot 2
+```yaml
+version: 1.1.0
+venue: coinbase_exchange_spot
+bitcoin: BTC-USD
+```
 
-ใน repository ใหม่ ไปที่:
+ถ้ายังเห็น `binance_usdm` หรือ `BTCUSDT` แปลว่ายังอัปโหลดไฟล์เก่าไม่หมด
 
-**Settings → Secrets and variables → Actions → New repository secret**
-
-ตั้งชื่อให้ตรงทุกตัวอักษร:
-
-| Secret | ค่า |
-|---|---|
-| `TELEGRAM_BOT2_TOKEN` | Token ของบอต Bitcoin ตัวใหม่ |
-| `TELEGRAM_BOT2_CHAT_ID` | Chat ID ของแชทส่วนตัวของคุณ |
-
-ชื่อ Secrets ไม่ใช่ `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` แบบบอตหุ้น แต่มี `BOT2` เพิ่มเข้ามา
-ถ้ามีเลข Chat ID ส่วนตัวของคุณจากบอตหุ้นเก็บไว้อยู่ สามารถใช้เลขนั้นกับบอตใหม่ได้ หลังส่ง `/start` ให้บอตใหม่แล้ว แต่ **Token ต้องเป็นของใหม่**
-
-ถ้ายังไม่มีเลข Chat ID ให้ตั้ง Token ก่อน แล้วทำขั้นที่ 4 เพื่อให้บอตส่งเลขมาให้เป็นการส่วนตัว
-
-ไม่ต้องตั้ง `GITHUB_TOKEN` เอง: Workflow ใช้ Token ที่ GitHub สร้างให้
-ไม่ต้องตั้ง Binance API key
-
-เอกสารทางการ: https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets
-
-## 4. ตรวจการเชื่อมต่อ Telegram
+## 3. รัน Check Data ใหม่
 
 ไปที่:
 
-**Actions → Bot2 - Telegram Setup → Run workflow → Branch main → Run workflow**
+**Actions -> Bot2 - Check Data -> Run workflow**
 
-เมื่อยังไม่มี Chat ID แต่คุณส่ง `/start` แล้ว ตัวช่วยจะส่งเลข Chat ID เข้า Telegram ของคุณ
-นำเลขนั้นไปตั้ง Secret `TELEGRAM_BOT2_CHAT_ID` แล้วรัน Setup อีกครั้ง
+รอบนี้ Log ควรเป็นชื่อคู่ประมาณ:
 
-ถ้ามี Chat ID อยู่แล้ว โปรแกรมจะทดสอบส่งข้อความทันที **ไม่พยายามค้นหา Chat ID ใหม่**
-ข้อความที่ควรได้รับ:
-
-```
-BTC QUANT BOT 2 - CONNECTION OK
-```
-
-### หากขึ้น CHAT_ID_NOT_CONFIGURED
-
-ส่ง `/start` ให้บอตใหม่โดยตรง แล้วรัน Setup ใหม่
-ถ้าบอตมีผู้ใช้หลายคน โปรแกรมจะไม่เดาว่าต้องส่งให้ใคร ให้ใส่ Chat ID ส่วนตัวเอง หรือใช้บอตใหม่ที่คุณใช้คนเดียว
-อย่าใช้บอตที่โปรแกรมอื่นกำลังอ่าน getUpdates หรือใช้ webhook อยู่
-
-## 5. ตรวจข้อมูลก่อนเริ่ม Backtest
-
-ไปที่:
-
-**Actions → Bot2 - Check Data → Run workflow**
-
-รอบนี้ตรวจ 4 ส่วน:
-
-```
-hourly_api
-funding_api
-archive_checksum
-funding_archive_checksum
+```text
+BTC-USD {'status': 'OK', ...}
+ETH-USD {'status': 'OK', ...}
+SOL-USD {'status': 'OK', ...}
+LINK-USD {'status': 'OK', ...}
+ADA-USD {'status': 'OK', ...}
+LTC-USD {'status': 'OK', ...}
 ```
 
-ดูผลใน Log และ Artifact `bot2-provider-check-...` ซึ่งมี `provider_check.json`
+ถ้า GitHub runner ยังเข้า Coinbase ไม่ได้ ระบบจะหยุดและเขียนเหตุผลลง `provider_check.json` โดยไม่สลับไป provider อื่นเงียบ ๆ
 
-**ถ้า HTTP 403 / 451:** เป็นปัญหาการเข้าถึงผู้ให้บริการจาก Runner ไม่ใช่ Token Telegram
-ระบบจะไม่เปลี่ยนตลาดให้เองและไม่ใช้วิธีหลบข้อจำกัด ต้องใช้งานจากสภาพแวดล้อมที่ผู้ให้บริการอนุญาต หรือออกแบบตัวดึงข้อมูลจากแหล่งอื่นพร้อมทดสอบใหม่โดยไม่ปนตลาด
+## 4. รัน Research Backtest
 
-ถ้า Archive เข้าถึงได้ แต่ Live API เข้าไม่ได้ อาจรัน Research Backtest จาก Archive ได้ แต่ Hourly Signals ยังใช้ข้อมูลสดไม่ได้
-ถ้า 404 อาจเป็นเดือนข้อมูลที่ยังไม่ถูกเผยแพร่หรือไฟล์ที่ไม่มี ให้ดูชื่อไฟล์ใน Manifest ไม่ต้องลดเกณฑ์ 90% เพื่อแก้ปัญหาข้อมูล
+เมื่อ Check Data ผ่าน:
 
-โปรเจกต์นี้ใช้ Binance USDT-M perpetual โดยเฉพาะ ไม่ใช่ Binance Spot หรือ Binance.US
-การใช้บริการต้องเป็นไปตามสิทธิ์และเงื่อนไขที่ใช้กับคุณเอง
+**Actions -> Bot2 - Research Backtest -> Run workflow**
 
-## 6. รัน Backtest ข้อมูลจริง
+ครั้งแรกอาจใช้เวลาหลายนาที เพราะข้อมูล 1H ถูกโหลดแบบแบ่งช่วงตามข้อจำกัดจำนวน candle ต่อ request ของ Coinbase หลังจากนั้น GitHub cache สามารถนำชุดข้อมูลที่ผ่าน SHA256 validation กลับมาใช้ได้เมื่อ config ยังเหมือนเดิม
 
-ไปที่:
+ดูผลจาก `BACKTEST_REPORT.md` และไฟล์:
 
-**Actions → Bot2 - Research Backtest → Run workflow**
-
-ให้ `notify` เป็น true เมื่อต้องการข้อความสรุปเข้า Telegram หลังจบ
-รอบแรกต้องดาวน์โหลดหลายปีและหลายเหรียญ อาจใช้เวลานาน ไม่ใช่รอบ Demo 30 วินาที
-Workflow กำหนด timeout 120 นาที และมี Cache สำหรับ Archive ที่ตรวจแล้ว แต่ยังไม่รับประกันว่าข้อมูลทุกไฟล์เข้าถึงได้
-
-ข้อมูลตั้งต้น:
-
-| ช่วง | ใช้ทำอะไร |
-|---|---|
-| 2021–2023 | ประวัติสำหรับคำนวณและฝึกแบบจำลองแบบย้อนหลังตามเวลา |
-| 2024 | เปรียบเทียบ 20 ตัวเลือกและเลือกหนึ่งตัว |
-| ม.ค. 2025–ส.ค. 2026 | Holdout ทดสอบตัวเลือกเดียวที่เลือกไว้แล้ว |
-
-คู่เปรียบเทียบ: BTC กับ ETH, SOL, BNB, XRP, LINK
-แต่ละคู่มี 4 แนวคิด: Pair Spread, Lead–Lag, RSI Divergence, Breakout
-
-ไม่มีการเปลี่ยนคู่หลังเห็นว่า Holdout ไม่ดี ไม่มีการค้นหาจนเจอเลข 90% แล้วเลือกเฉพาะผลที่สวย
-
-### ดูผลที่ไหน
-
-เปิด Workflow run ที่เสร็จแล้ว เลื่อนดู Summary และ Artifacts
-ดาวน์โหลด `bot2-research-...` ซึ่งมี:
-
-| ไฟล์ | ความหมาย |
-|---|---|
-| `BACKTEST_REPORT.md` | สรุปการศึกษา สมมติฐาน ผลสุทธิ และเหตุผลที่ผ่าน/ไม่ผ่าน |
-| `pair_selection.csv` | ผลเปรียบเทียบ 20 ตัวเลือกในช่วงเลือกคู่ |
-| `btc_only_baselines.csv` | เทียบวิธีที่ใช้ BTC อย่างเดียว |
-| `holdout_trades.csv` | รายการจำลองเข้า–ออกจริงตามกติกาบนข้อมูลย้อนหลังของตัวที่เลือก |
-| `holdout_equity.csv` | มูลค่าพอร์ตจำลองตามเวลา ไม่ใช่บัญชีจริง |
-| `model.json` | ตัวเลือกที่เลือก สถานะหลักฐาน และเงื่อนไข |
-| `data_manifest.json` | แหล่งข้อมูลและ Checksum |
-| `passive_benchmark.json` | BTC ถือยาวตามแบบจำลอง Perpetual ที่รวมต้นทุน/ Funding โดยประมาณ |
-
-คำว่า win = เทรดสุทธิกำไรหลังต้นทุน ไม่ใช่ราคาวิ่งขึ้นชั่วคราว และคู่สองขาคิดผลรวมทั้งสองขา
-
-## 7. เข้าใจเกณฑ์ 90% ที่ใช้
-
-บอตไม่ได้คำนวณว่า “สัญญาณนี้มีโอกาสชนะ 93.2%” และไม่ใช้ Z-score หรือ RSI มาแปลงเป็นเปอร์เซ็นต์ชนะ
-
-เกณฑ์ที่ตั้งไว้คือ **ขอบล่างของประมาณการอัตราชนะย้อนหลังสุทธิต้องมากกว่า 90%** พร้อมข้อกำหนดอื่น เช่น:
-
-- มีอย่างน้อย 200 เทรดรวม และอย่างน้อย 100 เทรดในแต่ละฝั่ง BUY/SELL
-- ข้อมูลทดสอบอย่างน้อย 12 เดือน มีหลายสัปดาห์ที่เกิดเทรด ไม่ได้มาจากวันเดียว
-- ใช้ Wilson และ Bootstrap แบบบล็อกเวลา ไม่ดูแค่เปอร์เซ็นต์ชนะที่สังเกตได้
-- ผลตอบแทนคาดหวังสุทธิเป็นบวก, Profit Factor อย่างน้อย 1.25, ต้นทุนคูณสองยังเป็นบวก
-- Drawdown ตามราคาปิดรายชั่วโมงไม่เกิน 25% และกำไรไม่กระจุกแค่บางเดือน
-- โมเดล/โค้ด/Config ตรงกัน ข้อมูลจริง และผลทดสอบไม่เก่าเกิน 45 วัน
-
-**ผ่านเกณฑ์นี้ก็ยังไม่ใช่คำรับประกันว่าเทรดถัดไปชนะเกิน 90%**
-ยังต้องทดสอบ Paper Trading แบบเดินหน้าแยกจากข้อมูลที่ใช้พัฒนา
-
-ข้อความนี้เป็นผลที่ยอมรับได้:
-
-```
-NO_VALIDATED_90_PERCENT_EDGE
+```text
+pair_selection.csv
+btc_only_baselines.csv
+holdout_trades.csv
+holdout_equity.csv
+model.json
 ```
 
-หมายถึงยังไม่มีหลักฐานตามเงื่อนไข ไม่ใช่ว่าต้องลดเกณฑ์แล้วบังคับให้บอตส่งหุ้น/เหรียญให้ได้
+ระบบจะเลือก Candidate จาก Validation ก่อน แล้วค่อยเปิด Holdout ของ Candidate เดียว ไม่เลือกตัวใหม่เพราะเห็นผล Holdout สวยกว่า
 
-## 8. ทดสอบและใช้งานบอต
+## 5. เกณฑ์ 80%
 
-ไปที่:
+ตามที่คุณปรับจาก 90% เป็น 80% ตอนนี้ Strict gate ใช้:
 
-**Actions → Bot2 - Hourly Signals → Run workflow**
-
-| mode | ใช้ทำอะไร |
-|---|---|
-| `demo` | ทดสอบส่งข้อความจำลอง ไม่มีราคา/ผลทดสอบปลอม และไม่สร้างสถานะเทรด |
-| `status` | ดูสถานะโมเดลและเหตุผลที่ยังไม่เปิดสัญญาณ |
-| `strict` | โหมดหลัก ต้องผ่านหลักฐานตามเกณฑ์ก่อนส่งแผนเข้า |
-| `paper` | ทดลองสัญญาณจากข้อมูลจริงด้วยโมเดลที่เลือก แต่ติดป้ายว่ายังไม่มี 90% ที่ยืนยัน ใช้รันด้วยมือเท่านั้น |
-
-`dry_run` ไม่ติ๊ก = ส่ง Telegram และบันทึกสถานะ
-`dry_run` ติ๊ก = สร้างรายงานอย่างเดียว ไม่ส่งและไม่เปลี่ยนสถานะ
-
-รอบอัตโนมัติเลือก `strict` เสมอ เริ่มทุกชั่วโมงที่นาที 07 ตาม UTC โดย GitHub อาจเข้าคิวช้ากว่านั้น
-ถ้าเกิน 25 นาทีหลังแท่งจบ จะไม่ส่งแผนเข้าใหม่จากแท่งนั้น
-
-**เปลี่ยน mode โดยกด Run workflow ใหม่** ไม่ใช่ Re-run all jobs ของรอบเก่า
-
-ก่อนมีผลวิจัย บอตจะไม่ส่ง BUY/SELL จริง ส่วน Demo ไม่จำเป็นต้องมีผลวิจัย
-ข้อความ Heartbeat วันละครั้งเกิดเมื่อ Workflow รันสำเร็จ ไม่รับประกันส่งหาก GitHub/ผู้ให้บริการล่ม
-
-## 9. เวลาเข้าจริงและความหมายของสัญญาณ
-
-ตัวอย่างเวลา UTC:
-
-```
-แท่ง 10:00–11:00 ปิดครบ
-ประมาณ 11:07 เริ่มสแกนและส่งข้อความ
-12:00 เป็นเวลาเข้าแบบจำลอง
+```yaml
+minimum_win_rate_lower_bound: 0.80
 ```
 
-ระบบไม่ย้อนไปอ้างว่าเข้า 11:00 ทั้งที่ข้อความเพิ่งมาทีหลัง
-นี่เป็นข้อกำหนดให้ Backtest ใกล้กับการใช้งานแจ้งเตือน ไม่ใช่จับราคาเร็วระดับวินาที
+แต่ความหมายคือ **ขอบล่างเชิงสถิติของ Historical net win rate ต้องมากกว่า 80%** ไม่ใช่ข้อความว่า “เทรดถัดไปมีโอกาสชนะ 80%”
 
-กรณี `pair_spread`:
-- BUY BTC ต้องมี SELL/SHORT เหรียญคู่
-- SELL BTC ต้องมี BUY/LONG เหรียญคู่
-- ขนาดสองขาดูจาก Notional Weight ที่แจ้ง ไม่ใช่ซื้อจำนวนเหรียญเท่ากัน
-- Pair stop รอราคาปิดชั่วโมงและเวลาออกถัดไป ไม่รับประกันขาดทุนไม่เกิน 2%
+ระบบยังตรวจอย่างอื่นร่วมด้วย เช่นจำนวนเทรดขั้นต่ำ BUY/SELL แยกฝั่ง Profit Factor ผลหลัง Cost stress ความสม่ำเสมอรายเดือน และ Drawdown
 
-กรณี `lead_lag`, `divergence`, `breakout`:
-- เข้าเฉพาะ BTC ตามทิศทาง
-- เหรียญคู่เป็นข้อมูลประกอบ ไม่ใช่คำสั่งซื้ออีกขา
-- ระยะ SL/TP อ้างอิง ATR และต้องพิจารณาราคาที่คุณได้จริง
-- บอตไม่ส่งคำสั่งตั้ง Stop/Target ให้ Exchange; ข้อความติดตามรายชั่วโมงอาจมาหลังราคาแตะระดับนั้นไปแล้ว
+ถ้าไม่ผ่าน จะขึ้นประมาณ:
 
-กราฟ 1H ไม่ได้แปลว่าปิดเทรดในหนึ่งชั่วโมงทุกครั้ง: เวลาเก็บสูงสุดขึ้นกับรูปแบบประมาณ 6, 24 หรือ 48 ชั่วโมง
+```text
+NO_VALIDATED_80_PERCENT_EDGE
+```
 
-## 10. แก้ปัญหาที่มักเจอ
+อันนี้ไม่ใช่ Error แต่หมายถึงข้อมูลยังไม่รองรับการอ้าง Edge ระดับที่ตั้งไว้
 
-| อาการ | ตรวจอะไร |
-|---|---|
-| Actions ไม่เห็น Workflow | ต้องอยู่ `.github/workflows/` บน default branch |
-| ส่ง Telegram ไม่ได้ | ชื่อ Secrets ต้องเป็น BOT2, Token ต้องเป็นบอตใหม่, ส่ง /start ให้บอตใหม่แล้ว |
-| Setup หา Chat ID ไม่ได้ | ใส่ Chat ID เอง หรือใช้บอตที่มีแชทส่วนตัวของคุณคนเดียว |
-| GITHUB_STATE_HTTP_403 | Workflow ต้องมี `permissions: contents: write`; นโยบายองค์กรอาจปิดการเขียนไว้ |
-| NO_BACKTEST_MODEL | ยังไม่รัน Research Backtest สำเร็จ |
-| NO_VALIDATED_90_PERCENT_EDGE | ผลการศึกษายังไม่ผ่าน ไม่ใช่ปัญหา Telegram |
-| CODE_OR_CONFIG_CHANGED | เปลี่ยนสมมติฐาน/โค้ดแล้ว โมเดลเดิมถูกยกเลิกความน่าเชื่อถือ ต้องศึกษาซ้ำและเก็บผลเก่า |
-| BACKTEST_EVIDENCE_STALE | ผลเก่าเกิน 45 วัน ต้องศึกษาและแยกข้อมูลใหม่อย่างระวัง ไม่ปรับจนชนะเฉพาะอดีต |
-| PROVIDER_ACCESS_DENIED | ปัญหาผู้ให้บริการ/สภาพแวดล้อมที่อนุญาต ไม่ใช่ Secret |
-| MISSING_HOURLY_BARS / FUNDING_GAP | ข้อมูลขาด ระบบจะไม่เติมข้อมูลเองเพื่อให้ผลดูดี |
-| Pending / queued นาน | GitHub อาจเข้าคิว และ Research กับ Scan ใช้กลุ่มควบคุมสถานะร่วมกัน |
-| ไม่เห็นสัญญาณทุกชั่วโมง | ระบบแจ้งเฉพาะเกิดสัญญาณและผ่านเกณฑ์ ไม่ฝืน BUY/SELL |
+## 6. Pair ใน v1.1 เปลี่ยนอย่างไร
 
-State อยู่ branch `btc-bot2-state` ภายใต้ `bot2/` ไม่มี Token เก็บในนั้น
-**อย่าลบ State เพื่อแก้แจ้งซ้ำโดยไม่ตรวจสถานะจริงก่อน** เพราะบอตไม่รู้ว่าคุณมี Position จริงอยู่หรือไม่
+v1.0 จำลอง Pair trade สองขาและต้องใช้ Funding ของ Perpetual แต่เมื่อเราเปลี่ยนมาใช้ Spot จะไม่สมเหตุผลที่จะสร้าง Short companion/funding ปลอม ๆ
 
-## 11. สิ่งที่ยังต้องตรวจต่อ
+ดังนั้น v1.1 ใช้ ETH/SOL/LINK/ADA/LTC เป็น **ข้อมูลประกอบเพื่อสร้างสัญญาณ BTC** เช่น Pair spread หรือ Lead-lag แต่ผล Backtest เป็น BTC direction เดียว:
 
-ยังไม่ได้ทดสอบครบวงจรจาก GitHub ของคุณ → Exchange → Telegram ในสภาพแวดล้อมสร้างไฟล์
-ยังไม่มีข้อมูลสมุดคำสั่ง การลื่นไหลราคาแบบละเอียด ค่าธรรมเนียมจริงของบัญชี ภาษี หรือแบบจำลอง Liquidation
-Funding ใช้อัตราประกาศจริง แต่ตีมูลค่าด้วยราคาเปิดรายชั่วโมงแทน Mark Price ที่เวลาชำระจริง จึงเป็นการประมาณ
-ผล Drawdown ตามราคาปิดอาจต่ำกว่าความเสียหายระหว่างแท่ง
+```text
+BTC: BUY / LONG
+Context: ETH-USD
+```
 
-อย่าทดลองด้วยเงินจริงจากตัวอย่างหรือผลทดสอบโปรแกรมเพียงอย่างเดียว
-รายละเอียดวิธีศึกษาอยู่ `docs/METHODOLOGY.md` และงานวิจัยพร้อมแหล่งอ้างอิงอยู่ `docs/RESEARCH.md`
+หรือ
 
-เอกสาร GitHub เรื่องเวลาและข้อจำกัดการรัน:
-https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+```text
+BTC: SELL / SHORT
+Context: SOL-USD
+```
+
+คำว่า SELL/SHORT ยังเป็นทิศทางวิจัย ไม่ได้หมายความว่า Coinbase Spot ของคุณสามารถ Short ได้ และบอตไม่ได้ส่ง Order
+
+## 7. ทดสอบ Telegram
+
+ไปที่ **Bot2 - Hourly Signals** แล้วเริ่มด้วย:
+
+```text
+mode: demo
+```
+
+จากนั้นลอง:
+
+```text
+mode: status
+```
+
+หลัง Research สำเร็จ สามารถลอง:
+
+```text
+mode: paper
+```
+
+Paper จะใช้ข้อมูลตลาดจริงและ Candidate ที่ Research เลือก แต่ไม่ต้องผ่าน strict 80% gate ส่วน Schedule อัตโนมัติใช้ `strict` และจะไม่ฝืนแจ้ง BUY/SELL ถ้าหลักฐานไม่ผ่าน
+
+## 8. ถ้ายัง Error
+
+ส่ง Screenshot ของ **Bot2 - Check Data** หรือข้อความใน `provider_check.json` มาได้ โดยเฉพาะบรรทัด `BTC-USD` และ `ETH-USD` จะบอกได้ว่าปัญหาคือ Network, HTTP status, schema หรือ candle ขาด
+
+อย่าส่ง Telegram Bot Token ใน Screenshot หรือแชท

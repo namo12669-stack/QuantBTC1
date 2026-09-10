@@ -85,36 +85,36 @@ def test_dry_run_never_sends_or_writes_state(tmp_path,cfg,monkeypatch):
 def test_paper_must_be_manual(tmp_path,cfg):
     with pytest.raises(ValueError):scan(cfg,Store(tmp_path/'s'),tmp_path/'o',mode='paper')
 
-def test_pair_message_required_second_leg(cfg):
-    b=constant_bars();s=Signal(20,b.index[20],'pair_spread','ETHUSDT',-1,1.,details={'z_now':2.,'cointegration_p':.001},beta=2)
+def test_pair_message_is_btc_direction_only(cfg):
+    b=constant_bars();s=Signal(20,b.index[20],'pair_spread','ETH-USD',-1,1.,details={'z_now':2.,'cointegration_p':.001},beta=2)
     text=entry_message(s,{},cfg,'paper')
     assert 'BTC: SELL (SHORT)' in text
-    assert 'ETHUSDT: BUY / LONG - REQUIRED HEDGE LEG' in text
+    assert 'NO COMPANION ORDER IS MODELED' in text
     assert 'PAPER ONLY' in text and 'NOT' in text
 
 def test_monitor_directional_stop_and_cooldown(cfg):
-    b=constant_bars();s=Signal(20,b.index[20],'divergence','ETHUSDT',1,1.)
+    b=constant_bars();s=Signal(20,b.index[20],'divergence','ETH-USD',1,1.)
     p=make_position(s,cfg,'paper')
     b.loc[b.index[22],['low','high']]=[95,105]
-    p,msg=monitor_position(p,{'BTCUSDT':b.iloc[:23],'ETHUSDT':b.iloc[:23]},cfg,b.index[23]+pd.Timedelta(minutes=7))
+    p,msg=monitor_position(p,{'BTC-USD':b.iloc[:23],'ETH-USD':b.iloc[:23]},cfg,b.index[23]+pd.Timedelta(minutes=7))
     assert 'STOP' in msg
     assert p['paper_exit_price']==98.5
     assert pd.Timestamp(p['cooldown_until'])==b.index[30]
-    same,_=monitor_position(p,{'BTCUSDT':b,'ETHUSDT':b},cfg,b.index[29])
+    same,_=monitor_position(p,{'BTC-USD':b,'ETH-USD':b},cfg,b.index[29])
     assert same is not None
-    done,_=monitor_position(p,{'BTCUSDT':b,'ETHUSDT':b},cfg,b.index[30])
+    done,_=monitor_position(p,{'BTC-USD':b,'ETH-USD':b},cfg,b.index[30])
     assert done is None
 
 def test_strict_stale_evidence_still_monitors_existing(tmp_path,cfg,monkeypatch):
     import btc_quant.app as app
-    b=constant_bars();s=Signal(20,b.index[20],'divergence','ETHUSDT',1,1.)
-    model={'source':'real_exchange_archive','fingerprint':fingerprint(cfg),'approved':False,
-           'evidence':{'approved':False},'test_end_exclusive':'2026-09-01','selected':Candidate('divergence','ETHUSDT').to_dict()}
+    b=constant_bars();s=Signal(20,b.index[20],'divergence','ETH-USD',1,1.)
+    model={'source':'real_coinbase_spot_api','fingerprint':fingerprint(cfg),'approved':False,
+           'evidence':{'approved':False},'test_end_exclusive':'2026-09-01','selected':Candidate('divergence','ETH-USD').to_dict()}
     state=Store(tmp_path/'s');state.put('model.json',model)
     pos=make_position(s,cfg,'strict');pos['model_fingerprint']=model['fingerprint']
     state.put('runtime.json',{'strict_position':pos})
     called=[]
-    monkeypatch.setattr(app,'live_history',lambda *a:({'BTCUSDT':b,'ETHUSDT':b},{}))
+    monkeypatch.setattr(app,'live_history',lambda *a:({'BTC-USD':b,'ETH-USD':b},{}))
     monkeypatch.setattr(app,'monitor_position',lambda *a: (called.append(True) or pos,'EXIT OBSERVATION'))
     monkeypatch.setattr(telegram,'send',lambda *a:None)
     scan(cfg,state,tmp_path/'o',manual=True,now='2026-09-09')
@@ -123,10 +123,10 @@ def test_strict_stale_evidence_still_monitors_existing(tmp_path,cfg,monkeypatch)
 def test_live_entry_deduplicated(tmp_path,cfg,monkeypatch):
     import btc_quant.app as app
     b=constant_bars();now=b.index[-1]+HOUR+pd.Timedelta(minutes=7)
-    event=Signal(len(b)-1,b.index[-1],'breakout','ETHUSDT',1,1.,details={'rvol':2})
+    event=Signal(len(b)-1,b.index[-1],'breakout','ETH-USD',1,1.,details={'rvol':2})
     state=Store(tmp_path/'s')
-    state.put('model.json',{'source':'real_exchange_archive','fingerprint':fingerprint(cfg),'selected':Candidate('breakout','ETHUSDT').to_dict(),'approved':False})
-    monkeypatch.setattr(app,'live_history',lambda *a:({'BTCUSDT':b,'ETHUSDT':b},{}))
+    state.put('model.json',{'source':'real_coinbase_spot_api','fingerprint':fingerprint(cfg),'selected':Candidate('breakout','ETH-USD').to_dict(),'approved':False})
+    monkeypatch.setattr(app,'live_history',lambda *a:({'BTC-USD':b,'ETH-USD':b},{}))
     monkeypatch.setattr(app,'generate_signals',lambda *a:[event])
     calls=[];monkeypatch.setattr(telegram,'send',lambda m:calls.append(m))
     scan(cfg,state,tmp_path/'o',mode='paper',manual=True,now=now)
@@ -136,8 +136,8 @@ def test_live_entry_deduplicated(tmp_path,cfg,monkeypatch):
 def test_late_paper_entry_withheld(tmp_path,cfg,monkeypatch):
     import btc_quant.app as app
     b=constant_bars();state=Store(tmp_path/'s')
-    state.put('model.json',{'fingerprint':fingerprint(cfg),'selected':Candidate('breakout','ETHUSDT').to_dict()})
-    monkeypatch.setattr(app,'live_history',lambda *a:({'BTCUSDT':b,'ETHUSDT':b},{}))
+    state.put('model.json',{'fingerprint':fingerprint(cfg),'selected':Candidate('breakout','ETH-USD').to_dict()})
+    monkeypatch.setattr(app,'live_history',lambda *a:({'BTC-USD':b,'ETH-USD':b},{}))
     calls=[];monkeypatch.setattr(telegram,'send',lambda m:calls.append(m))
     scan(cfg,state,tmp_path/'o',mode='paper',manual=True,now=b.index[-1]+HOUR+pd.Timedelta(minutes=40))
     assert 'LATE RUN' in calls[0]

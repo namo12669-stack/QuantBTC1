@@ -1,11 +1,17 @@
 # Changelog
 
-## 1.0.0 - 2026-09-09
+## 1.1.0 - 2026-09-10
 
-New independent BTC 1h research/alert project, not a replacement for stock V2.
+- Replaced Binance USD-M live/archive dependency with Coinbase Exchange public spot OHLCV after GitHub runner HTTP 451 failures.
+- Historical and live research now use the same `coinbase_exchange_spot` venue.
+- Symbols changed to BTC-USD with ETH-USD, SOL-USD, LINK-USD, ADA-USD and LTC-USD peers.
+- Pair-spread relationships now create BTC-direction signals only; no fabricated companion short leg or perpetual funding model on spot data.
+- Historical evidence target changed from 90% to 80% lower-bound target as requested; still not a next-trade probability.
+- Added public level-1 spread gate, provider diagnostics for every configured product, paginated candle downloads and normalized CSV SHA256 manifest.
+- Cached processed data can be reused only when manifest/range/symbol/hash checks pass.
+- Updated Telegram wording and research report for spot data.
+- Offline suite: 98 tests passing at build time.
 
-Four causal signal families, five comparison peers, real-archive downloader with checksum verification, event-driven cost/funding backtest, protected validation/holdout selection, explicit historical >90% evidence gate, second-bot secrets, persisted JSON state and simulated exit observations.
+## 1.0.0
 
-Added offline tests of pivots, real-signal causality on synthetic fixtures, delayed execution, two-leg costs, funding direction, sample coverage, missing data, token safety, deduplication and stale-evidence monitoring.
-
-No real-market backtest or live delivery test completed in the build environment. No winning pair or approved strategy is bundled.
+Initial research-first BTC 1H prototype.

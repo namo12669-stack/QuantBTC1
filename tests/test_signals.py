@@ -16,7 +16,7 @@ def test_plateau_is_not_unique_pivot():
 
 @pytest.mark.parametrize('direction,label',[(1,'BUY'),(-1,'SELL')])
 def test_signal_timestamp(direction,label):
-    b=bars(10); s=Signal(2,b.index[2],'divergence','ETHUSDT',direction,1.)
+    b=bars(10); s=Signal(2,b.index[2],'divergence','ETH-USD',direction,1.)
     assert s.label==label
     assert pd.Timestamp(s.to_dict()['signal_time'])==b.index[3]
 
@@ -40,7 +40,7 @@ def test_peer_required(family,cfg):
 
 def test_mismatched_clocks_rejected(cfg):
     b=bars(100); p=bars(100,start='2025-01-02')
-    with pytest.raises(DataError): generate_signals(b,p,Candidate('breakout','ETHUSDT'),cfg)
+    with pytest.raises(DataError): generate_signals(b,p,Candidate('breakout','ETH-USD'),cfg)
 
 def test_unknown_family(cfg):
     with pytest.raises(ValueError): generate_signals(bars(100),None,Candidate('magic',None),cfg)
@@ -61,7 +61,7 @@ def test_no_future_data_changes_past_signals(family,cfg):
     e=np.zeros(n)
     for i in range(1,n): e[i]=.85*e[i-1]+rng.normal(0,.003)
     b=bars(n,close=np.exp(.8+x+e)); p=bars(n,close=np.exp(x),seed=18)
-    cand=Candidate(family,'ETHUSDT')
+    cand=Candidate(family,'ETH-USD')
     full=generate_signals(b,p,cand,cfg)
     cut=3100
     prefix=generate_signals(b.iloc[:cut],p.iloc[:cut],cand,cfg)
@@ -85,7 +85,7 @@ def test_opposing_peer_blocks_breakout(cfg):
     b.loc[b.index[100],['open','high','low','close','volume']]=[100,110,99,109,300]
     p=bars(200,close=np.linspace(100,90,200))
     cfg['signals']['max_atr_fraction']=1
-    s=generate_signals(b,p,Candidate('breakout','ETHUSDT'),cfg)
+    s=generate_signals(b,p,Candidate('breakout','ETH-USD'),cfg)
     assert not any(x.index==100 for x in s)
 
 @pytest.mark.parametrize('mirror',[False,True])
@@ -94,7 +94,7 @@ def test_actual_divergence_only_after_pivot_confirmation(cfg,mirror):
     if mirror: cl=220-cl
     b=bars(230,close=cl);b['open']=cl;b['high']=cl+.05;b['low']=cl-.05
     p=constant_bars(230)
-    candidate=Candidate('divergence','ETHUSDT')
+    candidate=Candidate('divergence','ETH-USD')
     signals=generate_signals(b,p,candidate,cfg)
     assert signals
     event=next(x for x in signals if x.index==118)
@@ -108,7 +108,7 @@ def test_actual_lead_lag_prediction_is_causal(cfg):
     btc_returns=np.r_[np.zeros(7),returns[:-7]]*.9+rng.normal(0,.001,n)
     p=bars(n,close=100*np.exp(np.cumsum(returns)))
     b=bars(n,close=100*np.exp(np.cumsum(btc_returns)))
-    c=Candidate('lead_lag','ETHUSDT')
+    c=Candidate('lead_lag','ETH-USD')
     full=generate_signals(b,p,c,cfg)
     part=generate_signals(b.iloc[:3150],p.iloc[:3150],c,cfg)
     assert len(part)>20

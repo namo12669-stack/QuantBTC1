@@ -1,14 +1,17 @@
 {
-  "build_date_utc": "2026-09-09",
-  "project_version": "1.0.0",
-  "real_market_backtest_status": "NOT_RUN_NETWORK_UNAVAILABLE",
-  "reason": "Runtime download attempts failed due to network/DNS access; web research was available but complete exchange price archives were not downloaded.",
+  "build_date_utc": "2026-09-10",
+  "project_version": "1.1.0",
+  "market_data_provider": "Coinbase Exchange public spot REST",
+  "reason_for_provider_change": "v1.0 Binance USD-M live endpoints returned HTTP 451 on the user's GitHub-hosted runner",
+  "real_market_backtest_status": "NOT_BUNDLED; RUN BOT2 - RESEARCH BACKTEST ON GITHUB",
   "best_pair": null,
   "real_holdout_win_rate": null,
   "estimated_next_trade_win_probability": null,
+  "historical_lower_bound_target": 0.80,
   "approved_model_bundled": false,
   "real_data_download_workflow_included": true,
-  "offline_test_result": "111 tests passed; see test-results.xml for the final packaged run",
+  "offline_test_result": "98 tests passed; see test-results.xml",
   "synthetic_test_results_are_market_evidence": false,
-  "live_telegram_end_to_end_tested": false
+  "live_coinbase_github_end_to_end_tested": false,
+  "live_telegram_end_to_end_tested_in_build_environment": false
 }

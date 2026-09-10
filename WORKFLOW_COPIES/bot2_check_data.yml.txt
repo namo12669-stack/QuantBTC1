@@ -16,7 +16,7 @@ jobs:
           python-version: '3.13'
           cache: pip
       - run: python -m pip install -r requirements.txt
-      - name: Check official archive and live-data access
+      - name: Check Coinbase spot candle and order-book access
         run: python main.py check-data --output output
       - uses: actions/upload-artifact@v7
         if: always()
