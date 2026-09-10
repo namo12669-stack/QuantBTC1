@@ -1,0 +1,261 @@
+{
+  "approved": false,
+  "best_is_only_relative_to_tested_candidates": true,
+  "created_at": "2026-09-10 06:02:49.237460+00:00",
+  "data_quality": {
+    "ADA-USD": {
+      "expected_bars": 40896,
+      "max_consecutive_missing_hours": 5,
+      "missing_bars": 15,
+      "missing_examples": [
+        "2023-03-04 17:00:00+00:00",
+        "2023-03-04 18:00:00+00:00",
+        "2023-03-04 19:00:00+00:00",
+        "2023-03-04 20:00:00+00:00",
+        "2023-03-04 21:00:00+00:00",
+        "2025-10-25 16:00:00+00:00",
+        "2025-10-25 17:00:00+00:00",
+        "2025-10-25 18:00:00+00:00",
+        "2025-10-25 19:00:00+00:00",
+        "2025-10-25 20:00:00+00:00"
+      ],
+      "missing_fraction": 0.00036678403755868543,
+      "observed_bars": 40881
+    },
+    "BTC-USD": {
+      "expected_bars": 40896,
+      "max_consecutive_missing_hours": 5,
+      "missing_bars": 13,
+      "missing_examples": [
+        "2023-03-04 18:00:00+00:00",
+        "2023-03-04 19:00:00+00:00",
+        "2023-03-04 20:00:00+00:00",
+        "2025-10-25 16:00:00+00:00",
+        "2025-10-25 17:00:00+00:00",
+        "2025-10-25 18:00:00+00:00",
+        "2025-10-25 19:00:00+00:00",
+        "2025-10-25 20:00:00+00:00",
+        "2026-05-08 02:00:00+00:00",
+        "2026-05-08 03:00:00+00:00"
+      ],
+      "missing_fraction": 0.00031787949921752737,
+      "observed_bars": 40883
+    },
+    "ETH-USD": {
+      "expected_bars": 40896,
+      "max_consecutive_missing_hours": 5,
+      "missing_bars": 13,
+      "missing_examples": [
+        "2023-03-04 18:00:00+00:00",
+        "2023-03-04 19:00:00+00:00",
+        "2023-03-04 20:00:00+00:00",
+        "2025-10-25 16:00:00+00:00",
+        "2025-10-25 17:00:00+00:00",
+        "2025-10-25 18:00:00+00:00",
+        "2025-10-25 19:00:00+00:00",
+        "2025-10-25 20:00:00+00:00",
+        "2026-05-08 02:00:00+00:00",
+        "2026-05-08 03:00:00+00:00"
+      ],
+      "missing_fraction": 0.00031787949921752737,
+      "observed_bars": 40883
+    },
+    "LINK-USD": {
+      "expected_bars": 40896,
+      "max_consecutive_missing_hours": 5,
+      "missing_bars": 15,
+      "missing_examples": [
+        "2023-03-04 17:00:00+00:00",
+        "2023-03-04 18:00:00+00:00",
+        "2023-03-04 19:00:00+00:00",
+        "2023-03-04 20:00:00+00:00",
+        "2023-03-04 21:00:00+00:00",
+        "2025-10-25 16:00:00+00:00",
+        "2025-10-25 17:00:00+00:00",
+        "2025-10-25 18:00:00+00:00",
+        "2025-10-25 19:00:00+00:00",
+        "2025-10-25 20:00:00+00:00"
+      ],
+      "missing_fraction": 0.00036678403755868543,
+      "observed_bars": 40881
+    },
+    "LTC-USD": {
+      "expected_bars": 40896,
+      "max_consecutive_missing_hours": 5,
+      "missing_bars": 15,
+      "missing_examples": [
+        "2023-03-04 17:00:00+00:00",
+        "2023-03-04 18:00:00+00:00",
+        "2023-03-04 19:00:00+00:00",
+        "2023-03-04 20:00:00+00:00",
+        "2023-03-04 21:00:00+00:00",
+        "2025-10-25 16:00:00+00:00",
+        "2025-10-25 17:00:00+00:00",
+        "2025-10-25 18:00:00+00:00",
+        "2025-10-25 19:00:00+00:00",
+        "2025-10-25 20:00:00+00:00"
+      ],
+      "missing_fraction": 0.00036678403755868543,
+      "observed_bars": 40881
+    },
+    "SOL-USD": {
+      "expected_bars": 40896,
+      "max_consecutive_missing_hours": 5,
+      "missing_bars": 15,
+      "missing_examples": [
+        "2023-03-04 17:00:00+00:00",
+        "2023-03-04 18:00:00+00:00",
+        "2023-03-04 19:00:00+00:00",
+        "2023-03-04 20:00:00+00:00",
+        "2023-03-04 21:00:00+00:00",
+        "2025-10-25 16:00:00+00:00",
+        "2025-10-25 17:00:00+00:00",
+        "2025-10-25 18:00:00+00:00",
+        "2025-10-25 19:00:00+00:00",
+        "2025-10-25 20:00:00+00:00"
+      ],
+      "missing_fraction": 0.00036678403755868543,
+      "observed_bars": 40881
+    }
+  },
+  "evidence": {
+    "approved": false,
+    "confidence_method": "minimum of one-sided Wilson and 4-calendar-week circular-block bootstrap",
+    "family_alpha": 0.05,
+    "individual_alpha": 0.016666666666666666,
+    "per_trade_probability": null,
+    "reasons": [
+      "UNSTABLE_MONTHLY_RETURNS",
+      "overall:INSUFFICIENT_TRADES",
+      "overall:INSUFFICIENT_ACTIVE_WEEKS",
+      "overall:LOWER_BOUND_NOT_ABOVE_80_PERCENT",
+      "BUY:INSUFFICIENT_TRADES",
+      "BUY:INSUFFICIENT_ACTIVE_WEEKS",
+      "BUY:LOWER_BOUND_NOT_ABOVE_80_PERCENT",
+      "SELL:INSUFFICIENT_TRADES",
+      "SELL:INSUFFICIENT_ACTIVE_WEEKS",
+      "SELL:LOWER_BOUND_NOT_ABOVE_80_PERCENT"
+    ],
+    "source": "real_coinbase_spot_api",
+    "subsets": {
+      "BUY": {
+        "active_weeks": 1,
+        "block_mean_lower": 0.017512106527699158,
+        "block_win_lower": 1.0,
+        "bootstrap_block_weeks": 1,
+        "calendar_weeks": 1,
+        "evidence_lower_bound": 0.1808783864365096,
+        "historical_win_rate": 1.0,
+        "passed": false,
+        "reasons": [
+          "INSUFFICIENT_TRADES",
+          "INSUFFICIENT_ACTIVE_WEEKS",
+          "LOWER_BOUND_NOT_ABOVE_80_PERCENT"
+        ],
+        "trades": 1,
+        "wilson_lower": 0.1808783864365096,
+        "wins": 1
+      },
+      "SELL": {
+        "active_weeks": 1,
+        "block_mean_lower": 0.017211766337460705,
+        "block_win_lower": 1.0,
+        "bootstrap_block_weeks": 1,
+        "calendar_weeks": 1,
+        "evidence_lower_bound": 0.1808783864365096,
+        "historical_win_rate": 1.0,
+        "passed": false,
+        "reasons": [
+          "INSUFFICIENT_TRADES",
+          "INSUFFICIENT_ACTIVE_WEEKS",
+          "LOWER_BOUND_NOT_ABOVE_80_PERCENT"
+        ],
+        "trades": 1,
+        "wilson_lower": 0.1808783864365096,
+        "wins": 1
+      },
+      "overall": {
+        "active_weeks": 2,
+        "block_mean_lower": 0.017211766337460705,
+        "block_win_lower": 1.0,
+        "bootstrap_block_weeks": 4,
+        "calendar_weeks": 38,
+        "evidence_lower_bound": 0.3063454941915556,
+        "historical_win_rate": 1.0,
+        "passed": false,
+        "reasons": [
+          "INSUFFICIENT_TRADES",
+          "INSUFFICIENT_ACTIVE_WEEKS",
+          "LOWER_BOUND_NOT_ABOVE_80_PERCENT"
+        ],
+        "trades": 2,
+        "wilson_lower": 0.3063454941915556,
+        "wins": 2
+      }
+    },
+    "target": "historical net win-rate lower bound > 80%; not a next-trade guarantee",
+    "test_metrics": {
+      "daily_net_sharpe": 1.096607913763263,
+      "max_drawdown_close_mtm": 0.013504087314491042,
+      "mean_loss": 0.0,
+      "mean_net_return": 0.01736193643257993,
+      "mean_stress_return": 0.015361766900378849,
+      "mean_win": 0.01736193643257993,
+      "months": 20,
+      "positive_month_fraction": 0.1,
+      "profit_factor": null,
+      "profit_factor_note": "no losing trades; infinite ratio",
+      "total_return": 0.03502528715079123,
+      "trades": 2,
+      "win_rate": 1.0,
+      "wins": 2
+    },
+    "trade_ledger_sha256": "492798085fcfc5bd2d3048a0a7e6410cf852c74a25da2167c1bb1264a8634dc0"
+  },
+  "fingerprint": "e76b95e58269f592e490c3c337cd59caaca733a16c2814e3dd163e2ca9d5e285",
+  "historical_lower_bound_target": 0.8,
+  "limitations": [
+    "No individual-signal probability is calibrated.",
+    "Fixed peer list has survivorship and researcher-selection bias.",
+    "No order-book replay, broker fills, short-borrow cost, tax, liquidation or leverage model.",
+    "Coinbase public candle history has no provider-supplied archive checksum; normalized CSV hashes are stored locally.",
+    "SELL means a hypothetical BTC short; spot short availability/borrow is not modeled.",
+    "Close-marked drawdown understates possible intrabar drawdown.",
+    "Repeated tuning against this holdout invalidates its independence.",
+    "Missing provider candles are never forward-filled; rolling models restart after gaps and unmeasurable trades crossing gaps are excluded and disclosed."
+  ],
+  "schema": 3,
+  "selected": {
+    "family": "lead_lag",
+    "id": "lead_lag__LINK-USD",
+    "peer": "LINK-USD"
+  },
+  "selection_trials": 20,
+  "selection_used_holdout": false,
+  "source": "real_coinbase_spot_api",
+  "status": "NO_VALIDATED_80_PERCENT_EDGE",
+  "test_end_exclusive": "2026-09-01 00:00:00+00:00",
+  "test_start": "2025-01-01 00:00:00+00:00",
+  "trade_expression": "BTC_DIRECTION_ONLY; peer is signal context, not a required hedge leg",
+  "validation_metrics": {
+    "candidate": "lead_lag__LINK-USD",
+    "daily_net_sharpe": 0.0,
+    "family": "lead_lag",
+    "id": "lead_lag__LINK-USD",
+    "max_drawdown_close_mtm": 0.0,
+    "mean_net_return": null,
+    "mean_stress_return": null,
+    "months": 12,
+    "peer": "LINK-USD",
+    "positive_month_fraction": 0.0,
+    "profit_factor": null,
+    "total_return": 0.0,
+    "trades": 0,
+    "win_rate": null,
+    "wins": 0
+  },
+  "validation_qualified": false,
+  "validation_start": "2024-01-01 00:00:00+00:00",
+  "venue": "coinbase_exchange_spot",
+  "version": "1.1.2"
+}
