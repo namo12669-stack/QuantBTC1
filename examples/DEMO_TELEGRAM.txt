@@ -1,0 +1,32 @@
+BTC QUANT BOT 2 v1.2.0
+DEMO - SYNTHETIC, NOT LIVE
+BINANCE USD-M | BTCUSDT PERPETUAL | CLOSED 1H
+BUY / LONG | trend_pullback__ETHUSDT__RR2
+Companion: ETHUSDT (context, not a hedge order)
+
+ENTRY LIMIT: 99,880.00
+STOP LOSS: 98,980.00
+TAKE PROFIT: 101,680.00
+Quantity: 0.008000 BTC | Notional: 799.04 USDT
+Leverage: 3x ISOLATED | Initial margin ~266.35 USDT
+Equity input: 500.00 USDT (manual, not account read)
+Planned loss incl. reserves: 9.59 USDT
+Planned profit after reserves: 11.99 USDT
+Net reward/risk: 1.25 | User hard risk ceiling: 50 USDT
+
+Activate ONLY at 2026-09-10 16:00 +07
+Cancel unfilled at 2026-09-10 18:00 +07
+Time exit: 24h after fill hour; no later than 09-11 18:00 +07
+Cancel if SL or TP is breached before entry. Do not chase or place early.
+
+WHY THIS PLAN:
+- demo: synthetic arithmetic example; NOT a detected market signal
+- ema_fast: 99800
+- ema_slow: 98800
+- adx: 22
+
+Next-trade probability: NOT ESTIMATED. Loss can exceed the planned amount.
+Liquidation price: NOT account-verified. Check Binance Mark Price/liquidation before entry.
+SL uses Last/Contract Price in the simulation. Place exchange-side STOP MARKET + TP after fill.
+No orders placed. Bot does not know your actual fill, open position or balance. No news verification.
+Plan ID: a2a868b408d573ec0369

@@ -1,295 +1,206 @@
 from __future__ import annotations
-
 import argparse
-import os
+import copy
 from pathlib import Path
-
+import os
+import sys
+import traceback
+import numpy as np
 import pandas as pd
-
-from .common import ROOT, HOUR, utc, write_json, load_config, fingerprint, DataError
-from .data import download_history, load_history, live_history, PublicClient, API, fetch_candles, fetch_book
-from .signals import Candidate, generate_signals
-from .research import research, REAL_SOURCE
-from .store import Store
-from . import telegram
-from .backtest import directional_rules
-from .monitor import make_position, monitor_position
-
-
-def eligibility(model: dict | None, config: dict, now) -> tuple[bool, list[str]]:
-    if not model:
-        return False, ["NO_BACKTEST_MODEL: run Research Backtest first"]
-    reasons = []
-    threshold = float(config["proof_gate"]["minimum_win_rate_lower_bound"])
-    pct = int(round(threshold * 100))
-    if model.get("source") != REAL_SOURCE:
-        reasons.append("REAL_COINBASE_SPOT_EVIDENCE_REQUIRED")
-    if model.get("fingerprint") != fingerprint(config):
-        reasons.append("CODE_OR_CONFIG_CHANGED: rerun research")
-    if not model.get("approved") or not model.get("evidence", {}).get("approved"):
-        reasons.append(f"{pct}_PERCENT_HISTORICAL_EVIDENCE_NOT_PASSED")
-    end = model.get("test_end_exclusive")
-    if not end or utc(now) - utc(end) > pd.Timedelta(days=config["proof_gate"]["max_evidence_age_days"]):
-        reasons.append("BACKTEST_EVIDENCE_STALE")
-    if end and utc(end) > utc(now):
-        reasons.append("FUTURE_TEST_END_INVALID")
-    return not reasons, reasons
+from .common import VERSION,SCHEMA,HOUR,DataError,PlanError,load_config,utc,fingerprint,write_json
+from .data import download_history,load_history,check_data,live_snapshot
+from .signals import Candidate,Signal,generate_signals
+from .plans import build_plan,live_plan_checks
+from .backtest import evaluate_plan
+from .research import research
+from .store import Store,StateError
+from .telegram import send,setup_bot,TelegramError
+from .report import format_plan,status_text
 
 
-def status_message(model, reasons, config=None):
-    selected = model.get("selected") if model else None
-    threshold = float((config or {}).get("proof_gate", {}).get("minimum_win_rate_lower_bound", 0.80))
-    pct = int(round(threshold * 100))
-    text = [
-        "BTC QUANT BOT 2 v1.1.2 | 1H | COINBASE SPOT",
-        "STATUS: NO APPROVED ENTRY" if reasons else "STATUS: HISTORICAL EVIDENCE GATE PASSED",
-        f"Candidate: {selected['id'] if selected else 'not selected - research not completed'}",
-    ]
+def default_runtime():return {'schema':SCHEMA,'seen':[],'notices':{},'active':None,'reservations':[]}
+
+
+def update_account(store:Store,equity:float,flat:bool,config:dict,now=None)->dict:
+    now=utc(now or pd.Timestamp.now(tz='UTC'))
+    if not np.isfinite(equity) or equity<=0:raise ValueError('Positive finite equity is required')
+    if not flat:raise ValueError('Confirm no open BTC position AND no pending entry order first')
+    old=store.get('account.json',{});prev=float(old.get('equity',equity))
+    changes=list(old.get('reported_losses',[]))
+    if equity<prev:changes.append({'time':str(now),'loss':prev-equity})
+    account={'schema':SCHEMA,'equity':equity,'confirmed_at':str(now),'flat_confirmed':True,
+        'high_water_equity':max(equity,float(old.get('high_water_equity',equity))),
+        'reported_losses':[x for x in changes if utc(x['time'])>now-pd.Timedelta(days=8)]}
+    runtime=store.get('runtime.json',default_runtime())
+    # The user explicitly confirms that previous actual orders/positions are flat.
+    runtime['active']=None
+    store.put('runtime.json',runtime);store.put('account.json',account)
+    return account
+
+
+def account_checks(account:dict|None,runtime:dict,config:dict,now,risk:float|None=None)->list[str]:
+    a=config['account'];now=utc(now)
+    if not account or not account.get('flat_confirmed'):return ['CONFIRM_CURRENT_EQUITY_AND_FLAT_POSITION']
+    if (now-utc(account['confirmed_at'])).total_seconds()>a['max_equity_age_hours']*3600:return ['EQUITY_CONFIRMATION_EXPIRED']
+    if utc(account['confirmed_at'])>now:return ['ACCOUNT_TIMESTAMP_IN_FUTURE']
+    if account['equity']<account['high_water_equity']*(1-a['drawdown_pause_fraction']):return ['ACCOUNT_DRAWDOWN_PAUSE']
+    day=now.floor('D');week=day-pd.Timedelta(days=day.dayofweek)
+    # Conservative alert-risk reservation, not a claim about broker fills or realized PnL.
+    entries=runtime.get('reservations',[])
+    losses=account.get('reported_losses',[])
+    dayrisk=sum(x['risk'] for x in entries if utc(x['time'])>=day)+sum(x['loss'] for x in losses if utc(x['time'])>=day)
+    weekrisk=sum(x['risk'] for x in entries if utc(x['time'])>=week)+sum(x['loss'] for x in losses if utc(x['time'])>=week)
+    reasons=[]
+    if dayrisk+(risk or 0)>account['equity']*a['daily_loss_fraction']+1e-8:reasons.append('DAILY_RESERVED_RISK_LIMIT')
+    if weekrisk+(risk or 0)>account['equity']*a['weekly_loss_fraction']+1e-8:reasons.append('WEEKLY_RESERVED_RISK_LIMIT')
+    return reasons
+
+
+def model_reasons(model:dict|None,config:dict,now,paper=False)->list[str]:
+    if not model:return ['NO_RESEARCH_MODEL_RUN_BACKTEST_FIRST']
+    reasons=[]
+    if model.get('schema')!=SCHEMA or model.get('venue')!='binance_usdm':reasons.append('OLD_OR_WRONG_VENUE_MODEL')
+    if model.get('source')!='real_binance_usdm_archive':reasons.append('UNVERIFIED_MODEL_DATA_SOURCE')
+    if model.get('fingerprint')!=fingerprint(config):reasons.append('CODE_OR_CONFIG_CHANGED_RERUN_RESEARCH')
+    if not model.get('selected'):reasons.append('NO_SELECTED_CANDIDATE')
+    if utc(now)<utc(model['test_end_exclusive']):reasons.append('EVIDENCE_END_IN_FUTURE')
+    if (utc(now)-utc(model['test_end_exclusive'])).days>config['proof_gate']['max_evidence_age_days']:reasons.append('EVIDENCE_STALE_RERUN_RESEARCH_WITH_NEW_PERIOD')
+    if not paper and not model.get('approved'):reasons.append('NO_VALIDATED_80_PERCENT_EDGE')
+    return reasons
+
+
+def emit(text,output,store,runtime,dry_run=False,manual=False,key='status',plan=None,paper=False):
+    output.mkdir(parents=True,exist_ok=True)
+    (output/'telegram_preview.txt').write_text(text,encoding='utf-8')
+    write_json(output/'scan_status.json',{'version':VERSION,'paper':paper,'plan':plan,'text':text})
+    if dry_run:return
+    now=pd.Timestamp.now(tz='UTC');day=now.strftime('%Y-%m-%d')
+    if not plan and not manual and runtime['notices'].get(key)==day:return
+    if plan and not paper:
+        if plan['id'] in runtime['seen']:return
+        # Reserve before delivery. A timeout cannot cause blind duplicate risk alerts.
+        runtime['seen']=(runtime['seen']+[plan['id']])[-2000:]
+        runtime['active']=plan
+        runtime['reservations']=[x for x in runtime['reservations'] if utc(x['time'])>now-pd.Timedelta(days=8)]
+        runtime['reservations'].append({'time':str(now),'risk':plan['planned_loss_usdt'],'id':plan['id']})
+        store.put('runtime.json',runtime)
+    send(text)
+    runtime['notices'][key]=day
+    store.put('runtime.json',runtime)
+
+
+def demo_plan(config,now=None):
+    """A fixture for transport/arithmetic only. No synthetic PnL is presented as evidence."""
+    now=utc(now or pd.Timestamp.now(tz='UTC'));last=now.floor('h')-HOUR
+    idx=pd.date_range(last-40*HOUR,last,freq='h')
+    btc=pd.DataFrame({'open':100000.,'high':100400.,'low':99400.,'close':100000.,'volume':100.},index=idx)
+    sig=Signal(len(btc)-1,last,'trend_pullback','ETHUSDT',1,600.,
+        {'demo':'synthetic arithmetic example; NOT a detected market signal','ema_fast':99800.,'ema_slow':98800.,'adx':22.})
+    cand=Candidate('trend_pullback','ETHUSDT',2.)
+    return build_plan(sig,btc,cand,config,config['account']['equity_usdt'])
+
+
+def scan(config,output:Path,store:Store,mode='strict',manual=False,dry_run=False,now=None):
+    if mode in ('paper','demo','status') and not manual:raise ValueError('Non-strict modes require explicit manual invocation')
+    now=utc(now or pd.Timestamp.now(tz='UTC'));runtime=store.get('runtime.json',default_runtime())
+    if runtime.get('schema')!=SCHEMA:raise StateError('State schema mismatch; do not reuse old spot state')
+    if mode=='demo':
+        plan=demo_plan(config,now);text=format_plan(plan,demo=True)
+        # Demo never modifies active real/paper plan state or reserves risk.
+        (output/'telegram_preview.txt').write_text(text,encoding='utf-8');write_json(output/'demo_plan.json',plan)
+        if not dry_run:send(text)
+        return 'DEMO'
+    model=store.get('model.json')
+    if mode=='status':
+        reasons=model_reasons(model,config,now)
+        summary='\n'.join(reasons) if reasons else 'Historical gate passed; a NEW setup and operational checks are still required.'
+        if model and model.get('evidence'):
+            m=model['evidence']['metrics'];summary+=f"\nSelected: {model['selected']['id']}\nHoldout trades: {m['trades']}; win rate: {m['win_rate']}; net USDT: {m['net_profit_usdt']:.2f}"
+        emit(status_text('STATUS',summary),output,store,runtime,dry_run,manual)
+        return 'STATUS'
+    reasons=model_reasons(model,config,now,paper=mode=='paper')
     if reasons:
-        text.extend(reasons)
-    if model and model.get("evidence"):
-        ev = model["evidence"]["subsets"].get("overall", {})
-        if ev.get("trades"):
-            text.append(
-                f"Holdout: {ev['wins']}/{ev['trades']} net winners; conservative historical lower bound "
-                f"{ev['evidence_lower_bound']:.1%}"
-            )
-    text.extend([
-        f"Gate target: historical lower bound > {pct}%, NOT a forecast that the next trade wins {pct}% of the time.",
-        "No per-signal probability is calibrated. No profit guarantee.",
-        "No order placed. Paper mode is research-only and manual.",
-    ])
-    return "\n".join(text)
-
-
-def entry_message(signal, model, config, mode):
-    entry = signal.time + HOUR * config["execution"]["entry_delay_bars"]
-    threshold = int(round(float(config["proof_gate"]["minimum_win_rate_lower_bound"]) * 100))
-    lines = [
-        "BTC QUANT BOT 2 v1.1.2 | CLOSED 1H | COINBASE SPOT DATA",
-        f"PAPER ONLY - {threshold}% HISTORICAL GATE NOT REQUIRED" if mode == "paper" else "HISTORICAL EVIDENCE GATE PASSED - NOT A GUARANTEE",
-        f"BTC: {signal.label} ({'LONG' if signal.direction > 0 else 'SHORT'})",
-        f"Signal: {signal.family}",
-        f"Companion/context: {signal.peer or 'BTC only'}",
-        f"Confirmed at: {signal.time + HOUR}",
-        f"Planned model entry: {entry} (next full hourly open)",
-    ]
-    if signal.family == "pair_spread":
-        lines += [
-            "PAIR RELATIONSHIP USED AS BTC DIRECTION CONTEXT - NO COMPANION ORDER IS MODELED.",
-            f"Spread z: {signal.details.get('z_now', float('nan')):.2f}; beta: {signal.beta:.3f}; "
-            f"formation cointegration p: {signal.details.get('cointegration_p', float('nan')):.4f}",
-        ]
-    sl, tp, hold = directional_rules(signal.family, config)
-    lines += [
-        f"ATR at signal: {signal.atr:.2f} USD",
-        f"Research risk template: SL distance {sl * signal.atr:.2f}; TP distance {tp * signal.atr:.2f}; time stop {hold}h.",
-    ]
-    for k, v in signal.details.items():
-        if k in {"z_now", "cointegration_p"} and signal.family == "pair_spread":
-            continue
-        lines.append(f"{k}: {v:.5g}" if isinstance(v, float) else f"{k}: {v}")
-    subset = model.get("evidence", {}).get("subsets", {}).get(signal.label, {})
-    if subset.get("trades"):
-        lines.append(
-            f"Held-out {signal.label}: {subset['wins']}/{subset['trades']} net winners; "
-            f"conservative historical lower bound {subset['evidence_lower_bound']:.1%}."
-        )
-    lines += [
-        "Historical subset statistics are NOT the probability of this trade winning.",
-        "SELL/SHORT is a research direction; Coinbase spot borrow/short execution is NOT modeled.",
-        "Indicative alert only. No broker connection, no order, no automatic stop-loss.",
-    ]
-    return "\n".join(lines)
-
-
-def scan(config, store, output: Path, mode="strict", dry_run=False, manual=False, now=None):
-    now = utc(now) if now is not None else pd.Timestamp.now(tz="UTC")
-    model = store.get("model.json")
-    runtime = store.get("runtime.json", {})
-    ok, reasons = eligibility(model, config, now)
-    output.mkdir(parents=True, exist_ok=True)
-    messages = []
-
-    if mode == "demo":
-        messages = [
-            "DEMO - SYNTHETIC MESSAGE - NOT A LIVE SIGNAL\n"
-            "BTC QUANT BOT 2 v1.1.2 | 1H\n"
-            "Connection test only. No real-market edge is implied.\n"
-            "No order or position has been created."
-        ]
-    elif mode == "status":
-        messages = [status_message(model, reasons, config)]
-    else:
-        paper = mode == "paper"
-        if paper and not manual:
-            raise ValueError("Paper mode requires a manual workflow dispatch")
-        position_key = "paper_position" if paper else "strict_position"
-        existing_position = runtime.get(position_key)
-
-        if not model or not model.get("selected") or (not ok and not paper and not existing_position):
-            if manual or (runtime.get("heartbeat_date") != str(now.date()) and now.hour == config["alerts"]["heartbeat_hour_utc"]):
-                messages = [status_message(model, reasons, config)]
-                runtime["heartbeat_date"] = str(now.date())
-        else:
-            if model.get("fingerprint") != fingerprint(config):
-                raise DataError("Model fingerprint mismatch")
-            selected = model["selected"]
-            symbols = [config["data"]["bitcoin"], selected["peer"]]
-            prices, diagnostics = live_history(config, symbols, now)
-            write_json(output / "price_diagnostics.json", diagnostics)
-
-            position = runtime.get(position_key)
-            if position:
-                if position.get("model_fingerprint") != model["fingerprint"]:
-                    raise DataError("Earlier model has an unresolved alert-position; inspect state deliberately")
-                updated, message = monitor_position(position, prices, config, now)
-                runtime[position_key] = updated
-                if message:
-                    messages.append(message)
-
-            market_entry_block = any(d.get("spread_entry_block") for d in diagnostics.values())
-            if market_entry_block and manual:
-                messages.append(
-                    "BTC BOT 2: NEW ENTRY BLOCKED - live Coinbase bid/ask spread exceeds the configured limit. "
-                    "Existing simulated alert-position monitoring continues."
-                )
-
-            if not runtime.get(position_key) and (ok or paper) and not market_entry_block:
-                closed = prices[symbols[0]].index[-1] + HOUR
-                if now - closed > pd.Timedelta(minutes=config["execution"]["max_alert_delay_minutes"]):
-                    if manual:
-                        messages.append(
-                            "BTC BOT 2: LATE RUN - entry withheld. New alerts are issued only shortly after a completed hourly candle."
-                        )
-                else:
-                    cand = Candidate(selected["family"], selected["peer"])
-                    events = generate_signals(prices[symbols[0]], prices[symbols[1]], cand, config)
-                    current = [s for s in events if s.time + HOUR == closed]
-                    sent_key = f"{mode}:{selected['id']}:{closed}"
-                    if current and runtime.get("last_sent_key") != sent_key:
-                        event = current[-1]
-                        messages.append(entry_message(event, model, config, mode))
-                        position = make_position(event, config, mode)
-                        position["model_fingerprint"] = model["fingerprint"]
-                        runtime[position_key] = position
-                        runtime["last_sent_key"] = sent_key
-                        write_json(output / "signal.json", event.to_dict())
-                    elif manual:
-                        messages.append(
-                            f"BTC QUANT BOT 2 v1.1.2 | 1H\nNo NEW signal on latest completed bar ({closed}).\n"
-                            f"Selected model: {selected['id']}\nNo forced BUY/SELL. No order placed."
-                        )
-
-            if not ok and not paper and manual and not messages:
-                messages = [status_message(model, reasons, config)]
-            if not messages and not manual and now.hour == config["alerts"]["heartbeat_hour_utc"] and runtime.get("heartbeat_date") != str(now.date()):
-                messages = [
-                    "BTC QUANT BOT 2 v1.1.2 - DAILY HEARTBEAT\nScanner completed. No new entry message this hour.\n"
-                    "State here is a simulated alert state, not a broker account."
-                ]
-                runtime["heartbeat_date"] = str(now.date())
-
-    text = "\n\n".join(messages) or "No message required on this run."
-    (output / "telegram_preview.txt").write_text(text, encoding="utf-8")
-    write_json(output / "scan_summary.json", {
-        "mode": mode, "now": now, "strict_eligible": ok, "strict_reasons": reasons,
-        "messages": len(messages), "dry_run": dry_run,
-    })
-    if not dry_run:
-        for msg in messages:
-            telegram.send(msg)
-        if mode not in ("demo", "status"):
-            store.put("runtime.json", runtime)
-    print(text)
-    return messages
-
-
-def check_data(config, output):
-    """Verify the NEW provider from the actual GitHub runner before research."""
-    output.mkdir(parents=True, exist_ok=True)
-    cfg = config["data"]
-    client = PublicClient(cfg["timeout_seconds"], cfg["retries"], cfg.get("pause_seconds", 0.18))
-    now = pd.Timestamp.now(tz="UTC").floor("h")
-    checks = {}
-
-    for product in [cfg["bitcoin"], *cfg["peers"]]:
-        try:
-            bars = fetch_candles(client, product, now - pd.Timedelta(hours=6), now)
-            book = fetch_book(client, product)
-            checks[product] = {
-                "status": "OK", "bars": len(bars), "last_bar_start": str(bars.index[-1]),
-                "spread_bps": book["spread_bps"], "provider": "coinbase_exchange_public_spot",
-            }
-        except DataError as exc:
-            checks[product] = {"status": "FAILED", "reason": str(exc)}
-
-    write_json(output / "provider_check.json", checks)
-    for name, item in checks.items():
-        print(name, item)
-    if any(c["status"] != "OK" for c in checks.values()):
-        raise DataError(
-            "One or more Coinbase spot provider checks failed; inspect provider_check.json. "
-            "No proxy, bypass, or silent venue substitution was attempted."
-        )
+        emit(status_text('NO TRADE PLAN','\n'.join(reasons)),output,store,runtime,dry_run,manual,key='model_block')
+        return 'MODEL_BLOCK'
+    account=store.get('account.json')
+    if mode=='strict' and not runtime.get('active'):
+        reasons=account_checks(account,runtime,config,now)
+        if reasons:
+            emit(status_text('NO TRADE PLAN','\n'.join(reasons)),output,store,runtime,dry_run,manual,key='account_block')
+            return 'ACCOUNT_BLOCK'
+    cand=Candidate(model['selected']['family'],model['selected']['peer'],model['selected']['reward_risk'])
+    try:snap=live_snapshot(config,cand.peer)
+    except DataError as exc:
+        emit(status_text('LIVE DATA UNAVAILABLE - NO TRADE',str(exc)+'\nArchive research can still run independently. Use only an authorized environment for Binance live data.'),output,store,runtime,dry_run,manual,key='data_block')
+        return 'DATA_BLOCK'
+    now=utc(snap['asof']);btc=snap['prices'][config['data']['bitcoin']]
+    write_json(output/'live_diagnostics.json',{'asof':snap['asof'],'quote':snap['quote'],'rules':snap['rules'],'model':cand.to_dict()})
+    if mode=='strict' and runtime.get('active'):
+        active=runtime['active']
+        outcome=evaluate_plan(active,btc,snap['mark'],snap['funding'],config)
+        write_json(output/'active_plan_simulation.json',{k:v for k,v in outcome.items() if k!='path'})
+        text=status_text('EXISTING PLAN - NO ADDITIONAL POSITION',
+            f"Plan {active['id']}\nCandle-based simulation: {outcome['status']}\nThis is NOT your actual fill or account PnL. Confirm actual orders are closed/cancelled with Account Settings before any new plan.")
+        emit(text,output,store,runtime,dry_run,manual,key='active')
+        return 'ACTIVE_LOCK'
+    events=generate_signals(btc,snap['prices'].get(cand.peer),cand,config)
+    events=[s for s in events if s.time==btc.index[-1]]
+    if not events:
+        emit(status_text('NO QUALIFYING NEW SETUP',f'Checked {cand.name} on the latest completed 1h candle.'),output,store,runtime,dry_run,manual,key='no_setup')
+        return 'NO_SETUP'
+    equity=account['equity'] if mode=='strict' else config['account']['equity_usdt']
+    rejected=[]
+    for sig in events:
+        side='LONG' if sig.direction==1 else 'SHORT'
+        if mode=='strict' and side not in model['approved_sides']:rejected.append('SIDE_EVIDENCE_NOT_APPROVED');continue
+        try:plan=build_plan(sig,btc,cand,config,equity,snap['rules'])
+        except PlanError as exc:rejected.append(str(exc));continue
+        why=live_plan_checks(plan,snap,config,now)
+        if mode=='strict':why+=account_checks(account,runtime,config,now,plan['planned_loss_usdt'])
+        if why:rejected+=why;continue
+        if mode=='strict' and plan['id'] in runtime['seen']:rejected.append('ALREADY_SENT');continue
+        plan['equity_confirmation']=account.get('confirmed_at') if account and mode=='strict' else 'paper-config-only'
+        write_json(output/'trade_plan.json',plan)
+        emit(format_plan(plan,model,paper=mode=='paper'),output,store,runtime,dry_run,manual,key='plan',plan=plan,paper=mode=='paper')
+        return 'PLAN'
+    emit(status_text('SETUP REJECTED - NO TRADE','\n'.join(sorted(set(rejected)))),output,store,runtime,dry_run,manual,key='rejected')
+    return 'REJECTED'
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="BTC Quant Bot 2 v1.1.2 - Coinbase spot 1h research alerts; no trading API")
-    parser.add_argument("command", choices=["setup", "check-data", "research", "scan"])
-    parser.add_argument("--config", default=str(ROOT / "config.yaml"))
-    parser.add_argument("--data-dir", default="data")
-    parser.add_argument("--output", default="output")
-    parser.add_argument("--state-dir", default="state")
-    parser.add_argument("--download", action="store_true")
-    parser.add_argument("--notify", action="store_true")
-    parser.add_argument("--mode", choices=["strict", "paper", "demo", "status"], default="strict")
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--manual", action="store_true")
-    args = parser.parse_args(argv)
-
-    cfg = load_config(args.config)
-    output = Path(args.output)
-    output.mkdir(parents=True, exist_ok=True)
-    store = Store(Path(args.state_dir), cfg["alerts"]["state_branch"])
-
+    parser=argparse.ArgumentParser(description='BTC Bot2 v1.2 research/plan alerts only. No trading API.')
+    parser.add_argument('command',choices=['setup','check-data','research','scan','account'])
+    parser.add_argument('--config',default='config.yaml');parser.add_argument('--output',default='output')
+    parser.add_argument('--data-dir',default='data/binance_v12');parser.add_argument('--state-dir',default='state')
+    parser.add_argument('--download',action='store_true');parser.add_argument('--manual',action='store_true')
+    parser.add_argument('--mode',choices=['strict','paper','demo','status'],default='strict');parser.add_argument('--dry-run',action='store_true')
+    parser.add_argument('--section',choices=['archive','live','both'],default='both')
+    parser.add_argument('--equity',type=float);parser.add_argument('--flat-confirmed',action='store_true')
+    args=parser.parse_args(argv);out=Path(args.output);out.mkdir(parents=True,exist_ok=True)
     try:
-        if args.command == "setup":
-            telegram.setup_bot()
-        elif args.command == "check-data":
-            check_data(cfg, output)
-        elif args.command == "research":
-            if args.download:
-                download_history(cfg, Path(args.data_dir), output)
-            prices, funds = load_history(cfg, Path(args.data_dir))
-            model = research(cfg, prices, funds, output, source=REAL_SOURCE)
-            store.put("model.json", model)
-            store.put("last_research.json", {
-                "status": model["status"], "date": model["created_at"], "selected": model["selected"],
-            })
-            if args.notify:
-                ok, reasons = eligibility(model, cfg, pd.Timestamp.now(tz="UTC"))
-                telegram.send("RESEARCH BACKTEST COMPLETED\n" + status_message(model, reasons, cfg))
-        else:
-            scan(cfg, store, output, args.mode, args.dry_run, args.manual)
-    except Exception as exc:
-        error = {
-            "status": "FAILED", "type": type(exc).__name__, "reason": str(exc)[:500],
-            "delivery_status": "Unconfirmed: check Telegram/state; failure can occur after message acceptance",
-        }
-        write_json(output / "error.json", error)
-        print(f"FAILED: {error['type']}: {error['reason']}")
-        if args.command == "scan" and not args.dry_run and os.environ.get("TELEGRAM_BOT2_TOKEN") and os.environ.get("TELEGRAM_BOT2_CHAT_ID"):
-            try:
-                telegram.send(
-                    "BTC QUANT BOT 2 v1.1.2 - SCANNER FAILED\n"
-                    "The scan did not complete; inspect the GitHub Actions artifact.\n"
-                    "No broker account can be inspected or changed by this bot."
-                )
-            except telegram.TelegramError:
-                print("Telegram failure notification could not be confirmed.")
-        raise SystemExit(1) from None
-
-
-if __name__ == "__main__":
-    main()
+        cfg=load_config(args.config);store=Store(Path(args.state_dir),cfg['alerts']['state_branch'])
+        print(f'BTC QUANT BOT2 v{VERSION} | {args.command}',flush=True)
+        if args.command=='setup':setup_bot();return 0
+        if args.command=='account':
+            if args.equity is None:raise ValueError('--equity is required')
+            value=update_account(store,args.equity,args.flat_confirmed,cfg)
+            write_json(out/'account_confirmation.json',value)
+            (out/'telegram_preview.txt').write_text(status_text('ACCOUNT INPUT CONFIRMED',f"Manual equity: {args.equity:.2f} USDT. No exchange connection."),encoding='utf-8')
+            return 0
+        if args.command=='check-data':
+            result=check_data(cfg,out,args.section)
+            (out/'CHECK_DATA.md').write_text('# Provider check\n\n'+str(result)+'\n\nHistory and live access are independent. HISTORY_ONLY does not authorize a live trade.\n',encoding='utf-8')
+            print(result);return 0 if result['can_research'] or result['can_scan_live'] else 2
+        if args.command=='research':
+            if args.download:download_history(cfg,Path(args.data_dir),out)
+            prices,mark,funding,manifest=load_history(cfg,Path(args.data_dir))
+            model=research(cfg,prices,mark,funding,out,manifest)
+            if not args.dry_run:store.put('model.json',model)
+            print(model['status']);return 0
+        scan(cfg,out,store,args.mode,args.manual,args.dry_run);return 0
+    except (DataError,PlanError,StateError,TelegramError,ValueError,KeyError,RuntimeError) as exc:
+        # Sanitized errors only; request URLs may contain Telegram tokens.
+        message=f'{type(exc).__name__}: {exc}'
+        write_json(out/'failure.json',{'version':VERSION,'error':message})
+        (out/'FAILURE.md').write_text('# Task could not complete\n\n'+message+'\nNo approved trade plan has been manufactured.\n',encoding='utf-8')
+        print('FAILED: '+message,file=sys.stderr);return 1

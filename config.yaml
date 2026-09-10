@@ -1,60 +1,68 @@
+# 50 USDT is a ceiling, not default risk. Default: 2% equity, at most 3x isolated.
 project: btc-quant-bot2
-version: 1.1.2
+version: 1.2.0
 data:
-  venue: coinbase_exchange_spot
-  bitcoin: BTC-USD
-  peers: [ETH-USD, SOL-USD, LINK-USD, ADA-USD, LTC-USD]
+  venue: binance_usdm
+  bitcoin: BTCUSDT
+  peers:
+  - ETHUSDT
+  - SOLUSDT
   interval: 1h
-  # All listed peers have long Coinbase history by this window; exact continuity
-  # is verified at download time and the research aborts rather than forward-fill.
   start: '2022-01-01'
-  validation_start: '2024-01-01'
-  test_start: '2025-01-01'
+  validation_start: '2023-01-01'
+  test_start: '2025-06-01'
   end_exclusive: '2026-09-01'
-  live_bars: 3200
+  live_bars: 3500
   timeout_seconds: 25
   retries: 3
-  pause_seconds: 0.18
-  # Missing provider candles are NEVER forward-filled. Small gaps remain NaN,
-  # rolling models restart after each gap, and trades crossing a gap are excluded.
   max_missing_fraction: 0.005
   max_consecutive_missing_hours: 24
   min_live_complete_bars: 2500
 execution:
-  # Generic research assumptions, NOT Coinbase account-specific fees.
   fee_bps_per_side: 6.0
   slippage_bps_per_side: 4.0
   stress_multiplier: 2.0
-  # Signal candle opens at T and closes T+1h; scheduled alert runs after close.
-  # The simulated fill is T+2h so the backtest does not backdate execution.
   entry_delay_bars: 2
-  close_exit_delay_bars: 2
-  gross_exposure: 1.0
-  cooldown_bars: 6
-  funding_required: false
+  funding_required: true
   max_live_spread_bps: 12.0
   max_alert_delay_minutes: 25
+  funding_reserve_bps: 10.0
+  order_valid_hours: 2
+  hold_hours: 24
+  entry_retrace_atr: 0.2
+  stop_atr_min: 1.5
+  stop_atr_max: 4.0
+  stop_fraction_min: 0.003
+  stop_fraction_max: 0.03
+  structure_hours: 12
+  structure_buffer_atr: 0.25
+  min_net_reward_risk: 1.1
+  touch_through_ticks: 1
+  signal_cooldown_hours: 6
+  max_live_mark_basis_bps: 30.0
+  max_adverse_funding_rate: 0.001
+  max_quote_age_seconds: 15
 signals:
-  families: [pair_spread, lead_lag, divergence, breakout]
+  families:
+  - trend_pullback
+  - breakout
+  - divergence
+  - pair_spread
+  - lead_lag
   refit_hours: 168
   pair_formation_hours: 720
   pair_entry_z: 2.25
-  pair_exit_z: 0.30
-  pair_stop_z: 3.75
   pair_coint_p: 0.01
   pair_min_half_life: 2.0
   pair_max_half_life: 120.0
-  pair_min_return_correlation: 0.30
-  # In v1.1 pair_spread is a BTC DIRECTION signal derived from the relationship;
-  # no short companion leg or borrow cost is modeled.
-  pair_max_holding_hours: 24
+  pair_min_return_correlation: 0.3
   lead_formation_hours: 2160
   lead_inner_test_hours: 360
   lead_horizon_hours: 6
   lead_min_mse_improvement: 0.02
   lead_min_inner_ic: 0.05
   lead_forecast_cost_multiple: 3.0
-  lead_forecast_sigma_multiple: 0.50
+  lead_forecast_sigma_multiple: 0.5
   pivot_left: 3
   pivot_right: 3
   pivot_min_gap: 6
@@ -64,31 +72,54 @@ signals:
   breakout_hours: 48
   breakout_rvol: 1.5
   max_atr_fraction: 0.03
-  directional_max_holding_hours: 24
+  ema_fast: 27
+  ema_slow: 125
+  adx_period: 90
+  adx_min: 14.0
+  ema_separation_atr: 0.2
 selection:
-  min_validation_trades: 60
+  min_validation_trades: 40
   min_validation_profit_factor: 1.05
-  min_validation_positive_month_fraction: 0.50
-  criterion: daily_net_sharpe
+  min_validation_positive_month_fraction: 0.5
+  reward_risk_candidates:
+  - 1.5
+  - 2.0
 proof_gate:
-  # This is a conservative HISTORICAL win-rate evidence threshold, not an 80%
-  # probability forecast for the next trade.
-  minimum_win_rate_lower_bound: 0.80
+  minimum_win_rate_lower_bound: 0.8
   minimum_test_trades: 150
   minimum_direction_trades: 60
   minimum_test_calendar_months: 12
   minimum_active_weeks: 24
   minimum_direction_active_weeks: 12
-  minimum_profit_factor: 1.20
+  minimum_profit_factor: 1.2
   maximum_drawdown: 0.25
   minimum_positive_month_fraction: 0.58
   family_alpha: 0.05
   bootstrap_repetitions: 2000
-  confidence_checks: 3
+  confidence_checks: 6
   max_evidence_age_days: 45
   seed: 71129
 alerts:
-  default_mode: strict
-  state_branch: btc-bot2-state
-  heartbeat_hour_utc: 0
-  paper_mode_available_manually: true
+  state_branch: btc-bot2-v12-state
+account:
+  equity_usdt: 500.0
+  risk_fraction: 0.02
+  hard_risk_cap_usdt: 50.0
+  max_leverage: 3
+  max_margin_fraction: 0.6
+  margin_mode: ISOLATED
+  max_notional_usdt: 1500.0
+  maintenance_rate_assumption: 0.01
+  liquidation_fee_buffer_assumption: 0.01
+  min_margin_stress_stop_multiple: 3.0
+  daily_loss_fraction: 0.04
+  weekly_loss_fraction: 0.1
+  drawdown_pause_fraction: 0.2
+  max_equity_age_hours: 24
+  flat_confirmation_required: true
+research_rules:
+  tick_size: '0.1'
+  step_size: '0.001'
+  min_qty: '0.001'
+  min_notional: '100.0'
+  source: ASSUMPTIONS_NOT_HISTORICAL_EXCHANGE_FILTERS

@@ -1,0 +1,47 @@
+name: Bot2 - Account Settings
+on:
+  workflow_dispatch:
+    inputs:
+      equity_usdt:
+        description: Current total equity assigned to this bot in USDT (not margin for one order)
+        type: string
+        required: true
+        default: '500'
+      flat_confirmed:
+        description: I have checked Binance; NO open BTC position and NO pending entry order remain
+        type: boolean
+        required: true
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: btc-bot2-v12-state
+  cancel-in-progress: false
+jobs:
+  account:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Record manually verified equity and clear a closed plan lock
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EQUITY: ${{ inputs.equity_usdt }}
+          FLAT: ${{ inputs.flat_confirmed }}
+        shell: bash
+        run: |
+          if [ "$FLAT" != "true" ]; then
+            echo 'Confirm that all actual BTC positions AND pending entry orders are closed first.'
+            exit 1
+          fi
+          python main.py account --equity "$EQUITY" --flat-confirmed --output output
+      - name: Show confirmation
+        if: always()
+        run: python scripts/show_summary.py

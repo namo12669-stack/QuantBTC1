@@ -1,17 +1,44 @@
 {
-  "build_date_utc": "2026-09-10",
-  "project_version": "1.1.0",
-  "market_data_provider": "Coinbase Exchange public spot REST",
-  "reason_for_provider_change": "v1.0 Binance USD-M live endpoints returned HTTP 451 on the user's GitHub-hosted runner",
-  "real_market_backtest_status": "NOT_BUNDLED; RUN BOT2 - RESEARCH BACKTEST ON GITHUB",
-  "best_pair": null,
-  "real_holdout_win_rate": null,
-  "estimated_next_trade_win_probability": null,
-  "historical_lower_bound_target": 0.80,
-  "approved_model_bundled": false,
-  "real_data_download_workflow_included": true,
-  "offline_test_result": "98 tests passed; see test-results.xml",
-  "synthetic_test_results_are_market_evidence": false,
-  "live_coinbase_github_end_to_end_tested": false,
-  "live_telegram_end_to_end_tested_in_build_environment": false
+  "version": "1.2.0",
+  "built_at_utc": "2026-09-10T08:15:11.864676+00:00",
+  "offline_tests": {
+    "passed": 161,
+    "failures": 0,
+    "network_during_tests": "blocked by test fixture",
+    "scope": [
+      "causal signals and gap resets",
+      "risk and margin arithmetic",
+      "conditional fill/stop/TP rules",
+      "historical uncertainty and source gates",
+      "mock provider/GitHub/Telegram responses",
+      "state branch creation and delivery lock",
+      "workflow structure and security boundaries"
+    ]
+  },
+  "python": "3.13.5",
+  "packages": {
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "scipy": "1.17.0",
+    "statsmodels": "0.14.6",
+    "requests": "2.32.5",
+    "PyYAML": "6.0.3",
+    "pytest": "9.0.2"
+  },
+  "real_market_download_completed": false,
+  "real_market_backtest_completed": false,
+  "best_pair_identified": false,
+  "eighty_percent_edge_demonstrated": false,
+  "live_github_binance_telegram_end_to_end_verified": false,
+  "reason": "Container HTTP attempts could not resolve external data hosts. No market observations or performance were fabricated.",
+  "demo": "Synthetic arithmetic/transport fixture only. Does not write research approval.",
+  "user_repository_modified": false,
+  "telegram_connected_by_builder": false,
+  "exchange_orders_placed": false,
+  "paper_review": {
+    "uploaded_file": "gs631130444.pdf",
+    "sha256": "216f8cd1c1b3a497c82cc0f6872eac2a4dd0b5c8fb0819d1362309ca58040313",
+    "full_pdf_included_in_repository": false,
+    "finding": "Thai gold model; not an hourly BTC trading backtest."
+  }
 }

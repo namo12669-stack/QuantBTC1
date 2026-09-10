@@ -13,13 +13,14 @@ from .common import HOUR, DataError
 class Candidate:
     family: str
     peer: str | None
+    reward_risk: float = 1.5
 
     @property
     def name(self) -> str:
-        return f"{self.family}__{self.peer or 'BTC_ONLY'}"
+        return f"{self.family}__{self.peer or 'BTC_ONLY'}__RR{self.reward_risk:g}"
 
     def to_dict(self):
-        return {"family": self.family, "peer": self.peer, "id": self.name}
+        return {"family": self.family, "peer": self.peer, "reward_risk": self.reward_risk, "id": self.name}
 
 @dataclass
 class Signal:
@@ -47,20 +48,40 @@ class Signal:
                 "spread_mean": self.spread_mean, "spread_std": self.spread_std, "details": self.details}
 
 
+def rma(series: pd.Series, n: int) -> pd.Series:
+    """Wilder smoothing with an SMA seed, resetting at every nonfinite value."""
+    values=series.to_numpy(float);out=np.full(len(values),np.nan);seed=[];last=np.nan
+    for i,x in enumerate(values):
+        if not np.isfinite(x):seed=[];last=np.nan;continue
+        if not np.isfinite(last):
+            seed.append(x)
+            if len(seed)==n:last=float(np.mean(seed));out[i]=last
+        else:last=(last*(n-1)+x)/n;out[i]=last
+    return pd.Series(out,index=series.index)
+
+
 def indicator_frame(price: pd.DataFrame) -> pd.DataFrame:
-    f = price.copy()
-    change = f.close.diff()
-    up = change.clip(lower=0).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
-    down = (-change.clip(upper=0)).ewm(alpha=1/14, adjust=False, min_periods=14).mean()
-    rs = up / down.replace(0, np.nan)
-    f["rsi"] = 100 - 100 / (1 + rs)
-    f.loc[(down == 0) & (up > 0), "rsi"] = 100
-    f.loc[(down == 0) & (up == 0), "rsi"] = 50
-    tr = pd.concat([f.high - f.low, (f.high - f.close.shift()).abs(), (f.low - f.close.shift()).abs()], axis=1).max(axis=1)
-    f["atr"] = tr.ewm(alpha=1/14, adjust=False, min_periods=14).mean()
-    f["ema20"] = f.close.ewm(span=20, adjust=False, min_periods=20).mean()
-    f["rvol"] = f.volume / f.volume.shift(1).rolling(24).median().replace(0, np.nan)
+    f=price.copy();change=f.close.diff()
+    up=rma(change.clip(lower=0),14);down=rma(-change.clip(upper=0),14)
+    f['rsi']=100-100/(1+up/down.replace(0,np.nan))
+    f.loc[(down==0)&(up>0),'rsi']=100
+    f.loc[(down==0)&(up==0),'rsi']=50
+    tr=pd.concat([f.high-f.low,(f.high-f.close.shift()).abs(),(f.low-f.close.shift()).abs()],axis=1).max(axis=1)
+    f['atr']=rma(tr,14)
+    f['ema20']=f.close.ewm(span=20,adjust=False,min_periods=20).mean()
+    f['rvol']=f.volume/f.volume.shift(1).rolling(24).median().replace(0,np.nan)
     return f
+
+
+def adx(price: pd.DataFrame, n: int) -> pd.Series:
+    up=price.high.diff();down=-price.low.diff()
+    plus=up.where((up>down)&(up>0),0.);minus=down.where((down>up)&(down>0),0.)
+    tr=pd.concat([price.high-price.low,(price.high-price.close.shift()).abs(),(price.low-price.close.shift()).abs()],axis=1).max(axis=1)
+    denom=rma(tr,n).replace(0,np.nan)
+    p=100*rma(plus,n)/denom;m=100*rma(minus,n)/denom
+    dx=100*(p-m).abs()/(p+m).replace(0,np.nan)
+    dx=dx.where((p+m)!=0,0.)
+    return rma(dx,n)
 
 
 def confirmed_pivots(values: np.ndarray, left: int, right: int, kind: str) -> list[tuple[int,int]]:
@@ -114,6 +135,27 @@ def _generate_signals_contiguous(btc: pd.DataFrame, peer: pd.DataFrame | None, c
     if family in ("pair_spread", "lead_lag") and peer is None: raise ValueError("Relationship signal requires a peer")
     finite = np.isfinite(f.atr) & (f.atr > 0) & ((f.atr/f.close) < s["max_atr_fraction"])
     signals: list[Signal] = []
+    if family == "trend_pullback":
+        fast=f.close.ewm(span=s['ema_fast'],adjust=False,min_periods=s['ema_fast']).mean()
+        slow=f.close.ewm(span=s['ema_slow'],adjust=False,min_periods=s['ema_slow']).mean()
+        strength=adx(f,s['adx_period'])
+        peer_ret=peer.close.pct_change(6,fill_method=None) if peer is not None else pd.Series(0.,index=f.index)
+        peer_corr=np.log(btc.close).diff().rolling(168).corr(np.log(peer.close).diff()) if peer is not None else pd.Series(1.,index=f.index)
+        warm=max(s['ema_slow']*4,s['adx_period']*3)
+        for i in range(warm,len(f)):
+            if not finite.iloc[i] or not np.isfinite(strength.iloc[i]) or strength.iloc[i]<s['adx_min']:continue
+            d=1 if fast.iloc[i]>slow.iloc[i] else -1
+            separation=abs(fast.iloc[i]-slow.iloc[i])/f.atr.iloc[i]
+            reclaim=(f.low.iloc[i]<=fast.iloc[i] and f.close.iloc[i]>fast.iloc[i] and f.close.iloc[i]>f.close.iloc[i-1]) if d==1 else (f.high.iloc[i]>=fast.iloc[i] and f.close.iloc[i]<fast.iloc[i] and f.close.iloc[i]<f.close.iloc[i-1])
+            if not reclaim or separation<s['ema_separation_atr']:continue
+            if not np.isfinite(peer_ret.iloc[i]) or d*peer_ret.iloc[i]<0:continue
+            if peer is not None and (not np.isfinite(peer_corr.iloc[i]) or peer_corr.iloc[i]<.30):continue
+            signals.append(Signal(i,f.index[i],family,candidate.peer,d,float(f.atr.iloc[i]),
+                {'ema_fast':float(fast.iloc[i]),'ema_slow':float(slow.iloc[i]),'adx':float(strength.iloc[i]),
+                 'ema_separation_atr':float(separation),'peer_return_6h':float(peer_ret.iloc[i]),
+                 'return_correlation_168h':float(peer_corr.iloc[i]),
+                 'definition':'EMA27/125 + ADX90 >=14 + pullback reclaim; adapted hypothesis, not paper replication'}))
+        return signals
     if family == "breakout":
         n = s["breakout_hours"]
         high = f.high.shift(1).rolling(n).max()
@@ -235,6 +277,8 @@ def generate_signals(btc: pd.DataFrame, peer: pd.DataFrame | None, candidate: Ca
     restarted after every gap so a rolling window never silently bridges absent data.
     Signal.index is remapped to the original hourly grid for the backtester.
     """
+    if len(btc)>1 and not (np.diff(btc.index.asi8)==HOUR.value).all():
+        raise DataError("INPUT_MUST_USE_REGULAR_HOURLY_GRID_WITH_NAN_GAPS")
     required = ["open", "high", "low", "close", "volume"]
     if peer is not None and not btc.index.equals(peer.index):
         raise DataError("Unaligned pair candle grids")

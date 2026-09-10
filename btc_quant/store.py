@@ -12,7 +12,7 @@ class StateError(RuntimeError):
     pass
 
 class Store:
-    def __init__(self, local: Path, branch="btc-bot2-state"):
+    def __init__(self, local: Path, branch="btc-bot2-v12-state"):
         self.local = local
         self.branch = branch
         self.repo = os.environ.get("GITHUB_REPOSITORY", "")
@@ -115,5 +115,5 @@ class Store:
 
     @staticmethod
     def _validate(name):
-        if name not in ("model.json", "runtime.json", "last_research.json"):
+        if name not in ("model.json", "runtime.json", "last_research.json", "account.json"):
             raise StateError("Only whitelisted JSON state files may be written")

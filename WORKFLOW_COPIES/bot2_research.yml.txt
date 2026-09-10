@@ -2,60 +2,59 @@ name: Bot2 - Research Backtest
 on:
   workflow_dispatch:
     inputs:
-      notify:
-        description: Send research status to Bot 2 after completion
+      download:
+        description: Verify/download official Binance archive (does NOT require live API)
         type: boolean
         default: true
 permissions:
   contents: write
-# Shared with the scan workflow. State must never be updated concurrently.
+  actions: write
 concurrency:
-  group: btc-bot2-state
+  group: btc-bot2-v12-state
   cancel-in-progress: false
 jobs:
   research:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.13'
           cache: pip
       - run: python -m pip install -r requirements.txt
-      - uses: actions/cache@v6
+      - uses: actions/cache/restore@v6.1.0
         with:
-          path: data
-          key: bot2-coinbase-spot-v11-${{ hashFiles('config.yaml') }}
-          restore-keys: bot2-coinbase-spot-v11-
-      - name: Download/reuse Coinbase spot history and backtest
+          path: data/binance_v12/
+          key: binance-v12-${{ hashFiles('config.yaml') }}-${{ github.run_id }}
+          restore-keys: |
+            binance-v12-${{ hashFiles('config.yaml') }}-
+            binance-v12-
+      - name: Research on the declared Binance market
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          TELEGRAM_BOT2_TOKEN: ${{ secrets.TELEGRAM_BOT2_TOKEN }}
-          TELEGRAM_BOT2_CHAT_ID: ${{ secrets.TELEGRAM_BOT2_CHAT_ID }}
-          NOTIFY: ${{ inputs.notify }}
+          DOWNLOAD: ${{ inputs.download }}
           PYTHONUNBUFFERED: '1'
+          OPENBLAS_NUM_THREADS: '1'
         shell: bash
         run: |
-          args=(research --download --output output)
-          if [ "$NOTIFY" = "true" ]; then args+=(--notify); fi
+          args=(research --output output)
+          if [ "$DOWNLOAD" = "true" ]; then args+=(--download); fi
           python main.py "${args[@]}"
-      - name: Show research report
-        if: always()
-        shell: bash
-        run: |
-          if [ -f output/BACKTEST_REPORT.md ]; then
-            cat output/BACKTEST_REPORT.md >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'Research did not finish. Inspect the error and provider/data-manifest artifacts. No new proof of edge was produced.' >> "$GITHUB_STEP_SUMMARY"
-          fi
-      - uses: actions/upload-artifact@v7
+      - uses: actions/cache/save@v6.1.0
         if: always()
         with:
-          name: bot2-research-${{ github.run_id }}
+          path: data/binance_v12/
+          key: binance-v12-${{ hashFiles('config.yaml') }}-${{ github.run_id }}
+      - name: Show report
+        if: always()
+        run: python scripts/show_summary.py
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: bot2-v12-research-${{ github.run_id }}
           path: output/
-          retention-days: 60
+          retention-days: 90
           if-no-files-found: warn
