@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0 - 2026-09-10
+## 1.1.1 - 2026-09-10
 
 - Replaced Binance USD-M live/archive dependency with Coinbase Exchange public spot OHLCV after GitHub runner HTTP 451 failures.
 - Historical and live research now use the same `coinbase_exchange_spot` venue.

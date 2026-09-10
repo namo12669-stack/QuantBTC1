@@ -1,4 +1,4 @@
-# BTC Quant Bot 2 v1.1 - คู่มือเริ่มต้น
+# BTC Quant Bot 2 v1.1.1 - คู่มือเริ่มต้น
 
 เวอร์ชันนี้แก้ปัญหา `HTTP 451` ที่คุณเจอใน **Bot2 - Check Data** โดยเลิกใช้ Binance USD-M เป็น data provider ทั้งใน Backtest และ Live scan แล้วเปลี่ยนเป็น **Coinbase Exchange public spot data** เพื่อไม่ให้ Backtest ใช้ตลาดหนึ่งแต่ Live ใช้อีกตลาดหนึ่ง
 
@@ -36,7 +36,7 @@ TELEGRAM_BOT2_CHAT_ID
 เปิด `config.yaml` ต้องเห็น:
 
 ```yaml
-version: 1.1.0
+version: 1.1.1
 venue: coinbase_exchange_spot
 bitcoin: BTC-USD
 ```

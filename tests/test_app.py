@@ -153,3 +153,79 @@ def test_scan_failure_warning_is_not_fake_no_signal_claim(tmp_path,cfg,monkeypat
     err=json.loads((tmp_path/'o/error.json').read_text())
     assert 'delivery_status' in err and 'no_signal_emitted' not in err
     assert 'SCANNER FAILED' in messages[0]
+
+
+def test_remote_state_branch_creation_uses_github_sha(tmp_path, monkeypatch):
+    import btc_quant.store as store_mod
+    sha = "a" * 40
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_SHA", sha)
+    s = Store(tmp_path / "state")
+
+    class Resp:
+        def __init__(self, status, body=None):
+            self.status_code = status
+            self._body = body or {}
+        def json(self): return self._body
+
+    calls = []
+    def fake_request(method, endpoint, payload=None, params=None):
+        calls.append((method, endpoint, payload, params))
+        if method == "GET" and endpoint == "git/ref/heads/btc-bot2-state":
+            count = sum(1 for x in calls if x[0] == "GET" and x[1] == endpoint)
+            return Resp(404 if count == 1 else 200, {"object": {"sha": sha}})
+        if method == "POST" and endpoint == "git/refs":
+            assert payload["sha"] == sha
+            return Resp(201)
+        if method == "GET" and endpoint == "contents/bot2/runtime.json":
+            return Resp(404)
+        if method == "PUT" and endpoint == "contents/bot2/runtime.json":
+            return Resp(201)
+        raise AssertionError((method, endpoint))
+
+    monkeypatch.setattr(s, "request", fake_request)
+    s.put("runtime.json", {"ok": True})
+    assert not any(endpoint == "" for _, endpoint, _, _ in calls)
+
+
+def test_state_branch_base_sha_missing_is_explicit(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    monkeypatch.delenv("GITHUB_REF_NAME", raising=False)
+    monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
+    s = Store(tmp_path / "state")
+    with pytest.raises(StateError, match="STATE_BRANCH_BASE_SHA_UNAVAILABLE"):
+        s._base_sha_for_state_branch()
+
+def test_remote_state_branch_creation_race_422_is_verified(tmp_path, monkeypatch):
+    sha = "b" * 40
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.setenv("GITHUB_SHA", sha)
+    s = Store(tmp_path / "state")
+
+    class Resp:
+        def __init__(self, status, body=None):
+            self.status_code = status
+            self._body = body or {}
+        def json(self): return self._body
+
+    ref_reads = 0
+    def fake_request(method, endpoint, payload=None, params=None):
+        nonlocal ref_reads
+        if method == "GET" and endpoint == "git/ref/heads/btc-bot2-state":
+            ref_reads += 1
+            return Resp(404 if ref_reads == 1 else 200, {"object": {"sha": sha}})
+        if method == "POST" and endpoint == "git/refs":
+            return Resp(422)  # concurrent creator won the race
+        if method == "GET" and endpoint == "contents/bot2/runtime.json":
+            return Resp(404)
+        if method == "PUT" and endpoint == "contents/bot2/runtime.json":
+            return Resp(201)
+        raise AssertionError((method, endpoint))
+
+    monkeypatch.setattr(s, "request", fake_request)
+    s.put("runtime.json", {"ok": True})
+    assert ref_reads == 2

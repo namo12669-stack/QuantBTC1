@@ -49,10 +49,17 @@ class Store:
         if not self.remote: return
         ref = self.request("GET", f"git/ref/heads/{self.branch}")
         if ref.status_code == 404:
-            metadata = self.request("GET", "").json()
-            base = self.request("GET", f"git/ref/heads/{metadata['default_branch']}").json()
-            created = self.request("POST", "git/refs", {"ref": f"refs/heads/{self.branch}", "sha": base["object"]["sha"]})
-            if created.status_code not in (201,422): raise StateError("Cannot create state branch")
+            base_sha = self._base_sha_for_state_branch()
+            created = self.request(
+                "POST", "git/refs",
+                {"ref": f"refs/heads/{self.branch}", "sha": base_sha},
+            )
+            if created.status_code not in (201, 422):
+                raise StateError("Cannot create state branch")
+            # 422 can mean another job created the branch between our GET and POST.
+            verify = self.request("GET", f"git/ref/heads/{self.branch}")
+            if verify.status_code != 200:
+                raise StateError("State branch creation could not be verified")
         path = f"contents/bot2/{name}"
         old = self.request("GET", path, params={"ref": self.branch})
         content = json.dumps(json_safe(data), sort_keys=True, indent=2, allow_nan=False).encode()
@@ -63,6 +70,48 @@ class Store:
             body["sha"] = previous["sha"]
         r = self.request("PUT", path, body)
         if r.status_code not in (200,201): raise StateError("State update conflict; entry is not silently retried")
+
+
+    def _base_sha_for_state_branch(self):
+        """Resolve a safe commit SHA without assuming repository metadata has default_branch.
+
+        GitHub Actions exposes GITHUB_SHA for both scheduled and workflow_dispatch runs.
+        Prefer that immutable SHA.  Fall back to the current ref name, then the event
+        payload's repository.default_branch.  If none can be resolved, fail explicitly
+        rather than guessing a branch name.
+        """
+        sha = os.environ.get("GITHUB_SHA", "").strip()
+        if re.fullmatch(r"[0-9a-fA-F]{40,64}", sha):
+            return sha
+
+        ref_name = os.environ.get("GITHUB_REF_NAME", "").strip()
+        if ref_name and ref_name != self.branch and re.fullmatch(r"[A-Za-z0-9._/-]+", ref_name):
+            r = self.request("GET", f"git/ref/heads/{ref_name}")
+            if r.status_code == 200:
+                body = r.json()
+                candidate = body.get("object", {}).get("sha", "")
+                if re.fullmatch(r"[0-9a-fA-F]{40,64}", candidate):
+                    return candidate
+
+        event_path = os.environ.get("GITHUB_EVENT_PATH", "").strip()
+        if event_path:
+            try:
+                event = json.loads(Path(event_path).read_text(encoding="utf-8"))
+                default_branch = event.get("repository", {}).get("default_branch", "")
+            except (OSError, ValueError, TypeError):
+                default_branch = ""
+            if default_branch and re.fullmatch(r"[A-Za-z0-9._/-]+", default_branch):
+                r = self.request("GET", f"git/ref/heads/{default_branch}")
+                if r.status_code == 200:
+                    body = r.json()
+                    candidate = body.get("object", {}).get("sha", "")
+                    if re.fullmatch(r"[0-9a-fA-F]{40,64}", candidate):
+                        return candidate
+
+        raise StateError(
+            "STATE_BRANCH_BASE_SHA_UNAVAILABLE; GitHub Actions should provide GITHUB_SHA. "
+            "Run from the repository default branch or inspect workflow environment."
+        )
 
     @staticmethod
     def _validate(name):
