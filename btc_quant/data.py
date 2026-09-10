@@ -1,4 +1,4 @@
-"""Coinbase Exchange public spot OHLCV provider for v1.1.
+"""Coinbase Exchange public spot OHLCV provider for v1.1.2.
 
 This module deliberately avoids proxy/bypass behavior. Historical research and live
 signals use the same venue (Coinbase spot) so a provider switch cannot silently
@@ -137,8 +137,58 @@ def _iso(ts: pd.Timestamp) -> str:
     return utc(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def gap_summary(df: pd.DataFrame, start, end) -> dict:
+    """Describe missing hourly observations without inventing candles."""
+    start, end = utc(start), utc(end)
+    expected = pd.date_range(start, end - HOUR, freq="h", tz="UTC")
+    missing = expected.difference(df.index)
+    max_run = 0
+    if len(missing):
+        vals = missing.asi8
+        run = 1
+        max_run = 1
+        for i in range(1, len(vals)):
+            if vals[i] - vals[i-1] == HOUR.value:
+                run += 1
+            else:
+                max_run = max(max_run, run)
+                run = 1
+        max_run = max(max_run, run)
+    return {
+        "expected_bars": int(len(expected)),
+        "observed_bars": int(len(df.index.intersection(expected))),
+        "missing_bars": int(len(missing)),
+        "missing_fraction": float(len(missing) / len(expected)) if len(expected) else 0.0,
+        "max_consecutive_missing_hours": int(max_run),
+        "missing_examples": [str(x) for x in missing[:10]],
+    }
+
+
+def enforce_gap_policy(summary: dict, config: dict, product: str) -> None:
+    max_fraction = float(config["data"].get("max_missing_fraction", 0.005))
+    max_run = int(config["data"].get("max_consecutive_missing_hours", 24))
+    if summary["missing_fraction"] > max_fraction:
+        raise DataError(
+            f"{product}: missing hourly bars {summary['missing_bars']}/{summary['expected_bars']} "
+            f"({summary['missing_fraction']:.3%}) exceeds {max_fraction:.3%}; no forward-fill used"
+        )
+    if summary["max_consecutive_missing_hours"] > max_run:
+        raise DataError(
+            f"{product}: longest missing run {summary['max_consecutive_missing_hours']}h exceeds {max_run}h; "
+            "no forward-fill used"
+        )
+
+
+def to_hourly_grid(df: pd.DataFrame, start, end) -> pd.DataFrame:
+    """Reindex to the real hourly clock. Missing candles remain NaN, never forward-filled."""
+    grid = pd.date_range(utc(start), utc(end) - HOUR, freq="h", tz="UTC", name="time")
+    out = df.reindex(grid)
+    out.index.name = "time"
+    return out
+
+
 def fetch_candles(client: PublicClient, product: str, start, end) -> pd.DataFrame:
-    """Fetch [start, end) 1h candles by paginating below Coinbase's 300-candle cap."""
+    """Fetch [start, end) 1h candles. Missing hours are retained as gaps, never filled."""
     start, end = utc(start), utc(end)
     if start >= end:
         raise ValueError("start must be before end")
@@ -150,19 +200,16 @@ def fetch_candles(client: PublicClient, product: str, start, end) -> pd.DataFram
             f"{API}/products/{product}/candles",
             {"granularity": GRANULARITY_SECONDS, "start": _iso(cursor), "end": _iso(stop)},
         )
-        frame = normalize_coinbase_candles(payload)
-        # Coinbase may include observations slightly outside the requested range.
-        frame = frame.loc[(frame.index >= cursor) & (frame.index < stop)]
-        if frame.empty:
-            raise DataError(f"{product}: no candles for {_iso(cursor)} to {_iso(stop)}")
-        frames.append(frame)
+        if isinstance(payload, list) and payload:
+            frame = normalize_coinbase_candles(payload)
+            frame = frame.loc[(frame.index >= cursor) & (frame.index < stop)]
+            if not frame.empty:
+                frames.append(frame)
         cursor = stop
-    out = validate_bars(pd.concat(frames), contiguous=True)
-    out = out.loc[(out.index >= start) & (out.index < end)]
-    expected = int((end - start) / HOUR)
-    if len(out) != expected:
-        raise DataError(f"{product}: expected {expected} hourly candles, received {len(out)}")
-    return out
+    if not frames:
+        raise DataError(f"{product}: no candles returned for requested history")
+    out = validate_bars(pd.concat(frames), contiguous=False)
+    return out.loc[(out.index >= start) & (out.index < end)]
 
 
 def fetch_book(client: PublicClient, product: str) -> dict:
@@ -213,6 +260,8 @@ def download_history(config: dict, data_dir: Path, report_dir: Path) -> None:
     for product in [cfg["bitcoin"], *cfg["peers"]]:
         print(f"DOWNLOAD {product} {start} -> {end}", flush=True)
         bars = fetch_candles(client, product, start, end)
+        gaps = gap_summary(bars, start, end)
+        enforce_gap_policy(gaps, config, product)
         path = data_dir / f"{product.replace('-', '_')}_1h.csv"
         bars.to_csv(path)
         manifest["symbols"][product] = {
@@ -220,6 +269,8 @@ def download_history(config: dict, data_dir: Path, report_dir: Path) -> None:
             "first": str(bars.index[0]),
             "last": str(bars.index[-1]),
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "gap_policy": "missing candles kept as NaN on analysis grid; never forward-filled",
+            **gaps,
         }
     manifest["status"] = "VERIFIED_NORMALIZED_DATA"
     write_json(data_dir / "manifest.json", manifest)
@@ -244,17 +295,17 @@ def load_history(config: dict, directory: Path) -> tuple[dict, dict]:
             raise DataError(f"{product}: processed data checksum mismatch; redownload from provider")
         p = pd.read_csv(path, index_col="time", parse_dates=True)
         p.index = pd.to_datetime(p.index, utc=True)
-        p = validate_bars(p, contiguous=True)
-        if p.index[0] != start or p.index[-1] + HOUR != end:
-            raise DataError(f"{product}: history range does not match config")
+        p = validate_bars(p, contiguous=False)
+        gaps = gap_summary(p, start, end)
+        enforce_gap_policy(gaps, config, product)
+        p = to_hourly_grid(p, start, end)
+        p.attrs["gap_summary"] = gaps
         prices[product] = p
-        # Spot v1.1 has no perpetual funding component. Keep an empty table so
-        # downstream interfaces stay explicit rather than fabricating zero events.
         funding[product] = pd.DataFrame(columns=["rate"], index=pd.DatetimeIndex([], tz="UTC", name="time"))
 
     reference = prices[config["data"]["bitcoin"]].index
     if not all(reference.equals(prices[p].index) for p in prices):
-        raise DataError("Historical series are not perfectly aligned; no forward-fill is allowed")
+        raise DataError("Historical series hourly grids are not aligned")
     return prices, funding
 
 
@@ -268,10 +319,14 @@ def live_history(config: dict, symbols: list[str], now=None) -> tuple[dict, dict
     prices, diagnostics = {}, {}
 
     for product in symbols:
-        p = fetch_candles(client, product, start, closed_end)
-        if len(p) < 2500:
-            raise DataError(f"{product}: too few live bars for rolling models")
-        if p.index[-1] + HOUR != closed_end:
+        sparse = fetch_candles(client, product, start, closed_end)
+        gaps = gap_summary(sparse, start, closed_end)
+        enforce_gap_policy(gaps, config, product)
+        p = to_hourly_grid(sparse, start, closed_end)
+        complete = p.dropna(subset=["open", "high", "low", "close", "volume"])
+        if len(complete) < int(cfg.get("min_live_complete_bars", 2500)):
+            raise DataError(f"{product}: too few complete live bars for rolling models")
+        if p.iloc[-1].isna().any():
             raise DataError(f"{product}: latest completed hourly bar is missing")
         book = fetch_book(client, product)
         spread_block = book["spread_bps"] > config["execution"]["max_live_spread_bps"]
@@ -281,10 +336,13 @@ def live_history(config: dict, symbols: list[str], now=None) -> tuple[dict, dict
             "spread_bps": book["spread_bps"],
             "spread_entry_block": spread_block,
             "funding": "NOT_APPLICABLE_SPOT",
-            "bars": len(p),
+            "bars_on_grid": len(p),
+            **gaps,
         }
+        p.attrs["gap_summary"] = gaps
         prices[product] = p
 
     if not all(prices[symbols[0]].index.equals(prices[s].index) for s in symbols):
-        raise DataError("Live series are not aligned; no forward-filled relationship signal")
+        raise DataError("Live hourly grids are not aligned")
     return prices, diagnostics
+

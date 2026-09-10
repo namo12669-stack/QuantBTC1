@@ -1,3 +1,12 @@
+# v1.1.2 - missing-candle-safe research
+
+- Coinbase 1H gaps no longer abort the whole backtest when they are sparse.
+- No forward-fill or synthetic OHLCV is used. Missing hours remain NaN on an explicit UTC hourly grid.
+- Signal indicators/regressions restart after every data gap; pair and lead-lag windows cannot bridge missing candles.
+- Backtest trades whose required evaluation window crosses a missing BTC candle are excluded as unmeasurable rather than filled with invented prices.
+- Dataset still fails if missing fraction exceeds 0.5% or one missing run exceeds 24 hours (configurable).
+- Backtest report records missing-bar counts/fractions/longest gaps.
+
 # Changelog
 
 ## 1.1.1 - 2026-09-10

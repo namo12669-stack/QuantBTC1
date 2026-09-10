@@ -1,3 +1,5 @@
+import numpy as np
+from conftest import bars
 import pandas as pd
 import pytest
 from btc_quant.common import HOUR
@@ -63,3 +65,16 @@ def test_end_embargo(cfg):
     b=constant_bars(100); s=Signal(90,b.index[90],'breakout',None,1,1.)
     tr,eq=run_backtest(b,None,None,None,Candidate('breakout',None),cfg,b.index[0],b.index[-1]+HOUR,[s])
     assert tr.empty and (eq==1).all()
+
+def test_backtest_excludes_trade_crossing_data_gap(cfg):
+    from btc_quant.signals import Candidate, Signal
+    from btc_quant.backtest import run_backtest
+    b=bars(200)
+    p=bars(200, close=b.close.to_numpy()*1.01)
+    i=80
+    s=Signal(i,b.index[i],'breakout','ETH-USD',1,1.0,{})
+    # entry delay=2; place a missing candle inside the required holding window
+    b.loc[b.index[i+5],['open','high','low','close','volume']]=np.nan
+    tr,eq=run_backtest(b,p,None,None,Candidate('breakout','ETH-USD'),cfg,b.index[0],b.index[-1]+HOUR,signals=[s])
+    assert tr.empty
+    assert tr.attrs.get('invalid_due_to_data_gap')==1

@@ -71,3 +71,8 @@ The Coinbase public candles endpoint does not provide the same archive checksum 
 This repository does not include a real-market backtest result. GitHub must download the data and execute the research workflow. Software unit tests only validate program behavior. Repeatedly tuning parameters after looking at the same holdout destroys its out-of-sample meaning.
 
 See `docs/METHODOLOGY.md`, `docs/RESEARCH.md`, and `START_HERE_TH.md`.
+
+
+## Missing-candle policy (v1.1.2)
+
+Coinbase can omit historical hourly candles. v1.1.2 never forward-fills OHLCV. Small gaps are represented as missing rows on the UTC hourly clock, rolling models restart after every gap, and trades requiring missing bars are excluded from performance statistics. Research aborts when the configured missing fraction or maximum consecutive-gap threshold is exceeded. Review `output/data_manifest.json` and the Data quality section of `BACKTEST_REPORT.md`.

@@ -1,5 +1,5 @@
 project: btc-quant-bot2
-version: 1.1.1
+version: 1.1.2
 data:
   venue: coinbase_exchange_spot
   bitcoin: BTC-USD
@@ -15,6 +15,11 @@ data:
   timeout_seconds: 25
   retries: 3
   pause_seconds: 0.18
+  # Missing provider candles are NEVER forward-filled. Small gaps remain NaN,
+  # rolling models restart after each gap, and trades crossing a gap are excluded.
+  max_missing_fraction: 0.005
+  max_consecutive_missing_hours: 24
+  min_live_complete_bars: 2500
 execution:
   # Generic research assumptions, NOT Coinbase account-specific fees.
   fee_bps_per_side: 6.0

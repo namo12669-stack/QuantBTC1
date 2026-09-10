@@ -71,8 +71,13 @@ def research(config: dict, prices: dict, funding: dict, output: Path, source: st
     chosen = winner or best
     threshold = float(config["proof_gate"]["minimum_win_rate_lower_bound"])
 
+    data_quality = {
+        symbol: frame.attrs.get("gap_summary", {"missing_bars": 0, "missing_fraction": 0.0, "max_consecutive_missing_hours": 0})
+        for symbol, frame in prices.items()
+    }
+
     model = {
-        "schema": 2,
+        "schema": 3,
         "version": config["version"],
         "fingerprint": fingerprint(config),
         "source": source,
@@ -89,6 +94,7 @@ def research(config: dict, prices: dict, funding: dict, output: Path, source: st
         "best_is_only_relative_to_tested_candidates": True,
         "historical_lower_bound_target": threshold,
         "trade_expression": "BTC_DIRECTION_ONLY; peer is signal context, not a required hedge leg",
+        "data_quality": data_quality,
         "limitations": [
             "No individual-signal probability is calibrated.",
             "Fixed peer list has survivorship and researcher-selection bias.",
@@ -97,6 +103,7 @@ def research(config: dict, prices: dict, funding: dict, output: Path, source: st
             "SELL means a hypothetical BTC short; spot short availability/borrow is not modeled.",
             "Close-marked drawdown understates possible intrabar drawdown.",
             "Repeated tuning against this holdout invalidates its independence.",
+            "Missing provider candles are never forward-filled; rolling models restart after gaps and unmeasurable trades crossing gaps are excluded and disclosed.",
         ],
     }
 
@@ -116,7 +123,9 @@ def research(config: dict, prices: dict, funding: dict, output: Path, source: st
         model["status"] = "HISTORICAL_EVIDENCE_PASSED" if model["approved"] else f"NO_VALIDATED_{pct}_PERCENT_EDGE"
         evidence["trade_ledger_sha256"] = hashlib.sha256((output / "holdout_trades.csv").read_bytes()).hexdigest()
 
-        sample = btc.loc[(btc.index >= test_start) & (btc.index < test_end)]
+        sample = btc.loc[(btc.index >= test_start) & (btc.index < test_end)].dropna(subset=["open", "close"])
+        if sample.empty:
+            raise ValueError("No complete BTC observations for passive benchmark")
         ep, xp = float(sample.open.iloc[0]), float(sample.close.iloc[-1])
         unitcost = (config["execution"]["fee_bps_per_side"] + config["execution"]["slippage_bps_per_side"]) / 10000.0
         write_json(output / "passive_benchmark.json", {
@@ -138,7 +147,7 @@ def render_report(model, records, baselines, config):
     threshold = float(config["proof_gate"]["minimum_win_rate_lower_bound"])
     pct = int(round(threshold * 100))
     lines = [
-        "# BTC Quant Bot 2 v1.1 - research report", "",
+        "# BTC Quant Bot 2 v1.1.2 - research report", "",
         f"Status: **{model['status']}**",
         f"Data source: `{model['source']}` / venue `{config['data']['venue']}`", "",
         f"The strict gate targets a conservative historical net-win-rate lower bound above {pct}%.",
@@ -146,6 +155,13 @@ def render_report(model, records, baselines, config):
         "One winner is chosen on validation; holdout is not used to select a replacement.", "",
         f"Validation: {model['validation_start']} to {model['test_start']} (exclusive).",
         f"Holdout: {model['test_start']} to {model['test_end_exclusive']} (exclusive).", "",
+        "## Data quality / missing-hour policy", "",
+        "Missing candles are never forward-filled. Models restart after gaps; trades whose evaluation window crosses a missing BTC candle are excluded as unmeasurable.",
+        "",
+        "| Symbol | Missing bars | Missing fraction | Longest gap |",
+        "|---|---:|---:|---:|",
+        *[f"| {sym} | {q.get('missing_bars',0)} | {q.get('missing_fraction',0):.3%} | {q.get('max_consecutive_missing_hours',0)}h |" for sym,q in model.get('data_quality',{}).items()],
+        "",
         "## Validation comparison", "",
         "| Candidate | Trades | Net win rate | Mean net/trade | Daily Sharpe | Profit factor |",
         "|---|---:|---:|---:|---:|---:|",
@@ -175,7 +191,7 @@ def render_report(model, records, baselines, config):
               "Closed 1h signal; simulated entry is delayed until the next full hourly open after the notification hour.",
               "Every candidate trades BTC direction only. Companion assets are signal context, not required hedge legs.",
               f"Fee {config['execution']['fee_bps_per_side']} bp + slippage {config['execution']['slippage_bps_per_side']} bp per side of BTC notional.",
-              "No funding is included because v1.1 uses Coinbase spot market data.",
+              "No funding is included because v1.1.2 uses Coinbase spot market data.",
               "Directional TP/SL use a conservative stop-first assumption if both are touched in one candle.",
               "End-of-window entry embargo prevents unresolved trades being omitted.",
               "Cost stress doubles fee + slippage only; it is not a worst-case liquidity stress.", "",

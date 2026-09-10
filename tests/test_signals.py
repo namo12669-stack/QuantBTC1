@@ -114,3 +114,14 @@ def test_actual_lead_lag_prediction_is_causal(cfg):
     assert len(part)>20
     assert [s.to_dict() for s in full if s.index<3150]==[s.to_dict() for s in part]
     assert all(s.details['probability']=='NOT_ESTIMATED' for s in full)
+
+def test_signal_engine_does_not_bridge_missing_bar(cfg):
+    from btc_quant.signals import Candidate, generate_signals
+    b=bars(400)
+    p=bars(400, close=b.close.to_numpy()*1.01)
+    gap=b.index[200]
+    b.loc[gap,['open','high','low','close','volume']]=np.nan
+    p.loc[gap,['open','high','low','close','volume']]=np.nan
+    # Must not crash and any emitted signal must lie on a real bar.
+    out=generate_signals(b,p,Candidate('divergence','ETH-USD'),cfg)
+    assert all(s.time != gap for s in out)

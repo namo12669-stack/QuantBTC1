@@ -41,7 +41,7 @@ def status_message(model, reasons, config=None):
     threshold = float((config or {}).get("proof_gate", {}).get("minimum_win_rate_lower_bound", 0.80))
     pct = int(round(threshold * 100))
     text = [
-        "BTC QUANT BOT 2 v1.1.1 | 1H | COINBASE SPOT",
+        "BTC QUANT BOT 2 v1.1.2 | 1H | COINBASE SPOT",
         "STATUS: NO APPROVED ENTRY" if reasons else "STATUS: HISTORICAL EVIDENCE GATE PASSED",
         f"Candidate: {selected['id'] if selected else 'not selected - research not completed'}",
     ]
@@ -66,7 +66,7 @@ def entry_message(signal, model, config, mode):
     entry = signal.time + HOUR * config["execution"]["entry_delay_bars"]
     threshold = int(round(float(config["proof_gate"]["minimum_win_rate_lower_bound"]) * 100))
     lines = [
-        "BTC QUANT BOT 2 v1.1.1 | CLOSED 1H | COINBASE SPOT DATA",
+        "BTC QUANT BOT 2 v1.1.2 | CLOSED 1H | COINBASE SPOT DATA",
         f"PAPER ONLY - {threshold}% HISTORICAL GATE NOT REQUIRED" if mode == "paper" else "HISTORICAL EVIDENCE GATE PASSED - NOT A GUARANTEE",
         f"BTC: {signal.label} ({'LONG' if signal.direction > 0 else 'SHORT'})",
         f"Signal: {signal.family}",
@@ -114,7 +114,7 @@ def scan(config, store, output: Path, mode="strict", dry_run=False, manual=False
     if mode == "demo":
         messages = [
             "DEMO - SYNTHETIC MESSAGE - NOT A LIVE SIGNAL\n"
-            "BTC QUANT BOT 2 v1.1.1 | 1H\n"
+            "BTC QUANT BOT 2 v1.1.2 | 1H\n"
             "Connection test only. No real-market edge is implied.\n"
             "No order or position has been created."
         ]
@@ -177,7 +177,7 @@ def scan(config, store, output: Path, mode="strict", dry_run=False, manual=False
                         write_json(output / "signal.json", event.to_dict())
                     elif manual:
                         messages.append(
-                            f"BTC QUANT BOT 2 v1.1.1 | 1H\nNo NEW signal on latest completed bar ({closed}).\n"
+                            f"BTC QUANT BOT 2 v1.1.2 | 1H\nNo NEW signal on latest completed bar ({closed}).\n"
                             f"Selected model: {selected['id']}\nNo forced BUY/SELL. No order placed."
                         )
 
@@ -185,7 +185,7 @@ def scan(config, store, output: Path, mode="strict", dry_run=False, manual=False
                 messages = [status_message(model, reasons, config)]
             if not messages and not manual and now.hour == config["alerts"]["heartbeat_hour_utc"] and runtime.get("heartbeat_date") != str(now.date()):
                 messages = [
-                    "BTC QUANT BOT 2 v1.1.1 - DAILY HEARTBEAT\nScanner completed. No new entry message this hour.\n"
+                    "BTC QUANT BOT 2 v1.1.2 - DAILY HEARTBEAT\nScanner completed. No new entry message this hour.\n"
                     "State here is a simulated alert state, not a broker account."
                 ]
                 runtime["heartbeat_date"] = str(now.date())
@@ -235,7 +235,7 @@ def check_data(config, output):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="BTC Quant Bot 2 v1.1.1 - Coinbase spot 1h research alerts; no trading API")
+    parser = argparse.ArgumentParser(description="BTC Quant Bot 2 v1.1.2 - Coinbase spot 1h research alerts; no trading API")
     parser.add_argument("command", choices=["setup", "check-data", "research", "scan"])
     parser.add_argument("--config", default=str(ROOT / "config.yaml"))
     parser.add_argument("--data-dir", default="data")
@@ -282,7 +282,7 @@ def main(argv=None):
         if args.command == "scan" and not args.dry_run and os.environ.get("TELEGRAM_BOT2_TOKEN") and os.environ.get("TELEGRAM_BOT2_CHAT_ID"):
             try:
                 telegram.send(
-                    "BTC QUANT BOT 2 v1.1.1 - SCANNER FAILED\n"
+                    "BTC QUANT BOT 2 v1.1.2 - SCANNER FAILED\n"
                     "The scan did not complete; inspect the GitHub Actions artifact.\n"
                     "No broker account can be inspected or changed by this bot."
                 )

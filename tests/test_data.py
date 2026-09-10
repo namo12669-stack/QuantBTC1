@@ -76,3 +76,28 @@ def test_processed_checksum_required(tmp_path,cfg):
         'start':cfg['data']['start'],'end_exclusive':cfg['data']['end_exclusive'],'symbols':{}
     })
     with pytest.raises(DataError,match='checksum'): load_history(cfg,tmp_path)
+
+from btc_quant.data import gap_summary, enforce_gap_policy, to_hourly_grid
+
+def test_small_gap_is_measured_not_filled(cfg):
+    b=bars(100)
+    missing_time=b.index[10]
+    sparse=b.drop(missing_time)
+    g=gap_summary(sparse,b.index[0],b.index[-1]+HOUR)
+    assert g['missing_bars']==1
+    grid=to_hourly_grid(sparse,b.index[0],b.index[-1]+HOUR)
+    assert pd.isna(grid.loc[missing_time,'close'])
+    assert len(grid)==100
+
+def test_gap_policy_rejects_excess_fraction(cfg):
+    cfg['data']['max_missing_fraction']=0.005
+    summary={'missing_fraction':0.01,'missing_bars':10,'expected_bars':1000,'max_consecutive_missing_hours':1}
+    with pytest.raises(DataError,match='exceeds'):
+        enforce_gap_policy(summary,cfg,'BTC-USD')
+
+def test_gap_policy_rejects_long_run(cfg):
+    cfg['data']['max_missing_fraction']=1.0
+    cfg['data']['max_consecutive_missing_hours']=3
+    summary={'missing_fraction':0.01,'missing_bars':4,'expected_bars':400,'max_consecutive_missing_hours':4}
+    with pytest.raises(DataError,match='longest missing run'):
+        enforce_gap_policy(summary,cfg,'BTC-USD')

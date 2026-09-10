@@ -1,6 +1,6 @@
 """Event-driven BTC-only backtest using peer assets as signal context.
 
-In v1.1 all candidates ultimately express a BTC BUY/LONG or SELL/SHORT research
+In v1.1.2 all candidates ultimately express a BTC BUY/LONG or SELL/SHORT research
 signal. A pair relationship may create the signal, but the backtest does not
 fabricate a companion short leg or borrow/funding cost on a spot venue.
 """
@@ -72,7 +72,7 @@ def run_backtest(
     if not btc.index.is_monotonic_increasing or btc.index.has_duplicates:
         raise DataError("Bad candle ordering")
     if peer is not None and not peer.index.equals(btc.index):
-        raise DataError("Pair clocks do not match")
+        raise DataError("Pair hourly grids do not match")
     events = generate_signals(btc, peer, candidate, config) if signals is None else signals
     ex = config["execution"]
     unit_cost = (ex["fee_bps_per_side"] + ex["slippage_bps_per_side"]) / 10000.0
@@ -87,8 +87,12 @@ def run_backtest(
     wealth = 1.0
     rows = []
 
-    for signal in sorted(events, key=lambda z: z.index):
-        i = signal.index
+    invalid_gap_trades = 0
+    for signal in sorted(events, key=lambda z: z.time):
+        try:
+            i = int(index.get_loc(signal.time))
+        except KeyError:
+            continue
         known_time = index[i] + HOUR
         if not start <= known_time < end:
             continue
@@ -99,6 +103,16 @@ def run_backtest(
             continue
         sl_atr, tp_atr, hold = directional_rules(candidate.family, config)
         if e + hold > last_valid:
+            continue
+
+        # Do not fabricate prices across provider gaps. A trade whose required
+        # entry/exit observation window contains any missing BTC candle is not
+        # measurable from this dataset and is excluded from performance metrics.
+        # The count is attached to the returned ledger for audit/reporting.
+        required = ["open", "high", "low", "close", "volume"]
+        trade_window = btc.iloc[e:e + hold + 1][required]
+        if len(trade_window) < hold + 1 or not np.isfinite(trade_window.to_numpy(dtype=float)).all():
+            invalid_gap_trades += 1
             continue
 
         d = signal.direction
@@ -172,4 +186,7 @@ def run_backtest(
         })
         previous_exit = j
 
-    return pd.DataFrame(rows), equity
+    ledger = pd.DataFrame(rows)
+    ledger.attrs["invalid_due_to_data_gap"] = int(invalid_gap_trades)
+    equity.attrs["invalid_due_to_data_gap"] = int(invalid_gap_trades)
+    return ledger, equity

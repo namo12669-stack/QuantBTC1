@@ -106,7 +106,7 @@ def _lead_features(btc: pd.DataFrame, peer: pd.DataFrame):
     return f, n_base
 
 
-def generate_signals(btc: pd.DataFrame, peer: pd.DataFrame | None, candidate: Candidate, config: dict) -> list[Signal]:
+def _generate_signals_contiguous(btc: pd.DataFrame, peer: pd.DataFrame | None, candidate: Candidate, config: dict) -> list[Signal]:
     s = config["signals"]
     f = indicator_frame(btc)
     if peer is not None and not btc.index.equals(peer.index): raise DataError("Unaligned pair candles")
@@ -227,3 +227,35 @@ def generate_signals(btc: pd.DataFrame, peer: pd.DataFrame | None, candidate: Ca
                          "probability": "NOT_ESTIMATED"}))
         return signals
     raise ValueError(f"Unknown signal family: {family}")
+
+def generate_signals(btc: pd.DataFrame, peer: pd.DataFrame | None, candidate: Candidate, config: dict) -> list[Signal]:
+    """Generate signals only inside contiguous complete-data segments.
+
+    Missing candles remain missing. Indicators, regressions and pair statistics are
+    restarted after every gap so a rolling window never silently bridges absent data.
+    Signal.index is remapped to the original hourly grid for the backtester.
+    """
+    required = ["open", "high", "low", "close", "volume"]
+    if peer is not None and not btc.index.equals(peer.index):
+        raise DataError("Unaligned pair candle grids")
+    valid = np.isfinite(btc[required].to_numpy(dtype=float)).all(axis=1)
+    if peer is not None:
+        valid &= np.isfinite(peer[required].to_numpy(dtype=float)).all(axis=1)
+    ids = np.flatnonzero(valid)
+    if len(ids) == 0:
+        return []
+    splits = np.where(np.diff(ids) != 1)[0] + 1
+    groups = np.split(ids, splits)
+    out: list[Signal] = []
+    for g in groups:
+        if len(g) < 32:
+            continue
+        lo, hi = int(g[0]), int(g[-1]) + 1
+        b = btc.iloc[lo:hi].copy()
+        q = peer.iloc[lo:hi].copy() if peer is not None else None
+        local = _generate_signals_contiguous(b, q, candidate, config)
+        for sig in local:
+            sig.index = int(btc.index.get_loc(sig.time))
+            out.append(sig)
+    return sorted(out, key=lambda x: x.time)
+

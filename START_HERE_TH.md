@@ -1,4 +1,4 @@
-# BTC Quant Bot 2 v1.1.1 - คู่มือเริ่มต้น
+# BTC Quant Bot 2 v1.1.2 - คู่มือเริ่มต้น
 
 เวอร์ชันนี้แก้ปัญหา `HTTP 451` ที่คุณเจอใน **Bot2 - Check Data** โดยเลิกใช้ Binance USD-M เป็น data provider ทั้งใน Backtest และ Live scan แล้วเปลี่ยนเป็น **Coinbase Exchange public spot data** เพื่อไม่ให้ Backtest ใช้ตลาดหนึ่งแต่ Live ใช้อีกตลาดหนึ่ง
 
@@ -149,3 +149,8 @@ Paper จะใช้ข้อมูลตลาดจริงและ Candida
 ส่ง Screenshot ของ **Bot2 - Check Data** หรือข้อความใน `provider_check.json` มาได้ โดยเฉพาะบรรทัด `BTC-USD` และ `ETH-USD` จะบอกได้ว่าปัญหาคือ Network, HTTP status, schema หรือ candle ขาด
 
 อย่าส่ง Telegram Bot Token ใน Screenshot หรือแชท
+
+
+## ถ้า Coinbase มีแท่ง 1H หาย
+
+V1.1.2 จะไม่ forward-fill ราคาและไม่สร้างแท่งปลอมแล้ว หากช่องว่างมีเพียงเล็กน้อย ระบบจะเก็บชั่วโมงนั้นเป็น missing, เริ่ม indicator/rolling model ใหม่หลัง gap และไม่นับ trade ที่จำเป็นต้องใช้แท่งที่หาย หาก missing มากกว่า 0.5% หรือหายต่อเนื่องเกิน 24 ชั่วโมง dataset จะยัง fail เพื่อป้องกัน backtest ที่คุณภาพต่ำ ดูจำนวน gap ได้ใน `output/data_manifest.json` และ `BACKTEST_REPORT.md`.
