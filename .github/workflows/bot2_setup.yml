@@ -6,17 +6,17 @@ permissions:
 jobs:
   connect:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.13'
           cache: pip
       - run: python -m pip install -r requirements.txt
-      - name: Verify Bot 2 privately
+      - name: Verify existing chat ID or privately discover a new one
         env:
           TELEGRAM_BOT2_TOKEN: ${{ secrets.TELEGRAM_BOT2_TOKEN }}
           TELEGRAM_BOT2_CHAT_ID: ${{ secrets.TELEGRAM_BOT2_CHAT_ID }}

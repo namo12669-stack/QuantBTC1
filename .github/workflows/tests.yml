@@ -1,28 +1,27 @@
 name: Bot2 - Offline Tests
 on:
+  workflow_dispatch:
   push:
     branches: [main, master]
-  pull_request:
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7.0.0
         with:
           python-version: '3.13'
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m pytest -q --junitxml=test-results.xml
-      - uses: actions/upload-artifact@v7
+      - run: python -m pytest tests_v12 -q --junitxml=output/test-results.xml
+      - run: python main.py scan --manual --mode demo --dry-run --output output/demo
+      - uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
-          name: bot2-offline-tests-${{ github.run_id }}
-          path: test-results.xml
-          retention-days: 14
+          name: bot2-v12-test-results-${{ github.run_id }}
+          path: output/
